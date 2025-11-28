@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'log_file_manager.dart';
-import 'log_util.dart';
+import 'log_manager.dart';
 
 /// 日志查看器页面
 class LogViewerPage extends StatefulWidget {
@@ -26,7 +26,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
   Future<void> _loadLogFiles() async {
     setState(() => _isLoading = true);
     try {
-      final files = await LogUtil.getAllLogFiles();
+      final files = await LogManager.getAllLogFiles();
       setState(() {
         _logFiles = files;
         _isLoading = false;
@@ -71,7 +71,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
     }
 
     try {
-      final zipFile = await LogUtil.compressLogs();
+      final zipFile = await LogManager.compressLogs();
       if (zipFile != null) {
         if (mounted) {
           final size = await zipFile.length();
@@ -113,7 +113,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
     if (confirmed != true) return;
 
     try {
-      await LogUtil.clearAllLogs();
+      await LogManager.clearAllLogs();
       _selectedIndices.clear();
       await _loadLogFiles();
       _showMessage('清空成功');

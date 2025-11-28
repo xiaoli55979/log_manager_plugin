@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'log_file_manager.dart';
-import 'log_util.dart';
+import 'log_manager.dart';
 
 /// 增强版日志查看器
 class EnhancedLogViewer extends StatefulWidget {
@@ -27,7 +27,7 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
   Future<void> _loadLogFiles() async {
     setState(() => _isLoading = true);
     try {
-      final files = await LogUtil.getAllLogFiles();
+      final files = await LogManager.getAllLogFiles();
       setState(() {
         _logFiles = files;
         _isLoading = false;
@@ -72,7 +72,7 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
     }
 
     try {
-      final zipFile = await LogUtil.compressLogs();
+      final zipFile = await LogManager.compressLogs();
       if (zipFile != null) {
         if (mounted) {
           final size = await zipFile.length();
@@ -114,7 +114,7 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
     if (confirmed != true) return;
 
     try {
-      await LogUtil.clearAllLogs();
+      await LogManager.clearAllLogs();
       _selectedIndices.clear();
       await _loadLogFiles();
       _showMessage('清空成功');

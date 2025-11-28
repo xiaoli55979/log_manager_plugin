@@ -69,7 +69,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // 只需初始化一次
-  await LogUtil.instance.init(
+  await LogManager.instance.init(
     const LogManagerConfig(
       enabled: true,
       enableConsoleInDebug: true,
@@ -91,12 +91,12 @@ void main() async {
 ### 日志输出
 
 ```dart
-LogUtil.v('verbose');
-LogUtil.d('debug');
-LogUtil.i('info');
-LogUtil.w('warning');
-LogUtil.e('error', error: e, stackTrace: stackTrace);
-LogUtil.f('fatal');
+LogManager.v('verbose');
+LogManager.d('debug');
+LogManager.i('info');
+LogManager.w('warning');
+LogManager.e('error', error: e, stackTrace: stackTrace);
+LogManager.f('fatal');
 ```
 
 ### Dio拦截器
@@ -164,13 +164,13 @@ Navigator.push(
 
 ```dart
 // 获取所有日志文件
-final files = await LogUtil.getAllLogFiles();
+final files = await LogManager.getAllLogFiles();
 
 // 获取日志目录路径
-final path = LogUtil.logDirectoryPath;
+final path = LogManager.logDirectoryPath;
 
 // 清空所有日志
-await LogUtil.clearAllLogs();
+await LogManager.clearAllLogs();
 ```
 
 ### 按日期管理
@@ -188,7 +188,7 @@ await LogFileManager.instance.deleteLogsByDate('20231128');
 
 ```dart
 // 压缩所有日志
-final zipFile = await LogUtil.compressLogs();
+final zipFile = await LogManager.compressLogs();
 
 // 压缩指定日期的日志
 final zipFile = await LogFileManager.instance.compressLogsByDate('20231128');
@@ -229,14 +229,14 @@ await LogFileManager.instance.cleanLegacyLogFiles();
 // main.dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LogUtil.instance.init(const LogManagerConfig(...));
+  await LogManager.instance.init(const LogManagerConfig(...));
   runApp(const MyApp());
 }
 
 // plugin_a.dart - 插件A直接使用
 class PluginA {
   void doSomething() {
-    LogUtil.d('插件A: 开始执行');
+    LogManager.d('插件A: 开始执行');
     // ...
   }
 }
@@ -244,7 +244,7 @@ class PluginA {
 // plugin_b.dart - 插件B直接使用
 class PluginB {
   void doSomething() {
-    LogUtil.i('插件B: 处理数据');
+    LogManager.i('插件B: 处理数据');
     // ...
   }
 }
@@ -259,7 +259,7 @@ class PluginB {
 
 ```dart
 // 动态修改配置
-await LogUtil.instance.updateConfig(
+await LogManager.instance.updateConfig(
   LogManagerConfig(
     enableConsoleInRelease: true,  // 临时开启Release日志
     logLevel: Level.trace,          // 调整日志级别
@@ -270,7 +270,7 @@ await LogUtil.instance.updateConfig(
 ### 获取当前配置
 
 ```dart
-final config = LogUtil.config;
+final config = LogManager.config;
 print('当前日志级别: ${config.logLevel}');
 print('文件日志: ${config.enableFileLog}');
 ```
@@ -353,7 +353,7 @@ await LogReporter.instance.uploadLogsAsString(
 
 ```dart
 // 在初始化时统一配置
-await LogUtil.instance.init(
+await LogManager.instance.init(
   const LogManagerConfig(
     deleteAfterUpload: false,  // 默认保留压缩文件
     maxBatchSize: 200 * 1024,  // 默认每批200KB
@@ -402,14 +402,14 @@ const LogManagerConfig(
 )
 
 // 这些日志会被过滤掉（不输出到控制台和文件）
-LogUtil.v('trace 日志');   // ❌ 被过滤
-LogUtil.d('debug 日志');   // ❌ 被过滤
-LogUtil.i('info 日志');    // ❌ 被过滤
+LogManager.v('trace 日志');   // ❌ 被过滤
+LogManager.d('debug 日志');   // ❌ 被过滤
+LogManager.i('info 日志');    // ❌ 被过滤
 
 // 这些日志会正常输出
-LogUtil.w('warning 日志'); // ✅ 输出
-LogUtil.e('error 日志');   // ✅ 输出
-LogUtil.f('fatal 日志');   // ✅ 输出
+LogManager.w('warning 日志'); // ✅ 输出
+LogManager.e('error 日志');   // ✅ 输出
+LogManager.f('fatal 日志');   // ✅ 输出
 ```
 
 **建议配置**：
@@ -434,7 +434,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // 1. 初始化日志系统
-  await LogUtil.instance.init(
+  await LogManager.instance.init(
     const LogManagerConfig(
       enabled: true,
       enableConsoleInDebug: true,
@@ -490,10 +490,10 @@ class MyApp extends StatelessWidget {
               ElevatedButton(
                 onPressed: () {
                   // 输出各级别日志
-                  LogUtil.d('这是调试日志');
-                  LogUtil.i('这是信息日志');
-                  LogUtil.w('这是警告日志');
-                  LogUtil.e('这是错误日志');
+                  LogManager.d('这是调试日志');
+                  LogManager.i('这是信息日志');
+                  LogManager.w('这是警告日志');
+                  LogManager.e('这是错误日志');
                 },
                 child: const Text('输出日志'),
               ),
@@ -542,13 +542,13 @@ class MyApp extends StatelessWidget {
 // 主应用 main.dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LogUtil.instance.init(const LogManagerConfig(...));  // 只初始化一次
+  await LogManager.instance.init(const LogManagerConfig(...));  // 只初始化一次
   runApp(const MyApp());
 }
 
 // 插件A、插件B、插件C... 直接使用
-LogUtil.d('来自插件A的日志');
-LogUtil.i('来自插件B的日志');
+LogManager.d('来自插件A的日志');
+LogManager.i('来自插件B的日志');
 ```
 
 所有插件共享同一个日志实例，日志会统一管理和存储。
@@ -558,12 +558,12 @@ LogUtil.i('来自插件B的日志');
 - **iOS**: `Application Support/logs/`
 - **Android**: `应用数据目录/logs/`
 
-可以通过 `LogUtil.logDirectoryPath` 获取完整路径。
+可以通过 `LogManager.logDirectoryPath` 获取完整路径。
 
 ### 3. 如何在Release模式下查看日志？
 
 ```dart
-await LogUtil.instance.init(
+await LogManager.instance.init(
   const LogManagerConfig(
     enableConsoleInRelease: true,  // 开启Release控制台输出
   ),
@@ -591,16 +591,16 @@ const LogManagerConfig(
 )
 ```
 
-这样只有 `LogUtil.e()` 和 `LogUtil.f()` 的日志会被写入文件。
+这样只有 `LogManager.e()` 和 `LogManager.f()` 的日志会被写入文件。
 
 **方法2：运行时动态调整**
 
 ```dart
 // 正常情况记录所有日志
-await LogUtil.instance.init(const LogManagerConfig(logLevel: Level.debug));
+await LogManager.instance.init(const LogManagerConfig(logLevel: Level.debug));
 
 // 生产环境只记录错误
-await LogUtil.instance.updateConfig(const LogManagerConfig(logLevel: Level.error));
+await LogManager.instance.updateConfig(const LogManagerConfig(logLevel: Level.error));
 ```
 
 ### 6. 上报失败怎么办？

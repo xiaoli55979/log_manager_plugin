@@ -6,7 +6,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 初始化日志系统
-  await LogUtil.instance.init(
+  await LogManager.instance.init(
     const LogManagerConfig(
       enabled: true,
       enableConsoleInDebug: true,
@@ -43,10 +43,10 @@ void main() async {
 
       // 示例：模拟上报成功
       await Future.delayed(const Duration(seconds: 1));
-      LogUtil.i('模拟上报成功（实际使用时请实现真实的上报逻辑）');
+      LogManager.i('模拟上报成功（实际使用时请实现真实的上报逻辑）');
       return true;
     } catch (e) {
-      LogUtil.e('上报失败', error: e);
+      LogManager.e('上报失败', error: e);
       return false;
     }
   });
@@ -81,16 +81,16 @@ void main() async {
       */
 
       // 模拟分批上传
-      LogUtil.i('开始分批上传 ${batches.length} 批日志');
+      LogManager.i('开始分批上传 ${batches.length} 批日志');
       for (final batch in batches) {
         await Future.delayed(const Duration(milliseconds: 100));
-        LogUtil.d(
+        LogManager.d(
             '上传批次 ${batch.batchIndex}/${batch.totalBatches} - ${batch.fileName} (${batch.content.length} 字符)');
       }
-      LogUtil.i('所有批次上传完成');
+      LogManager.i('所有批次上传完成');
       return true;
     } catch (e) {
-      LogUtil.e('字符串上报失败', error: e);
+      LogManager.e('字符串上报失败', error: e);
       return false;
     }
   });
@@ -153,21 +153,21 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _testApiCall() async {
     try {
-      LogUtil.i('开始测试API调用');
+      LogManager.i('开始测试API调用');
       final response = await _dio.get('/posts/1');
-      LogUtil.i('API调用成功: ${response.statusCode}');
+      LogManager.i('API调用成功: ${response.statusCode}');
     } catch (e) {
-      LogUtil.e('API调用失败', error: e);
+      LogManager.e('API调用失败', error: e);
     }
   }
 
   Future<void> _testLogs() async {
-    LogUtil.v('这是一条Verbose日志');
-    LogUtil.d('这是一条Debug日志');
-    LogUtil.i('这是一条Info日志');
-    LogUtil.w('这是一条Warning日志');
-    LogUtil.e('这是一条Error日志');
-    LogUtil.f('这是一条Fatal日志');
+    LogManager.v('这是一条Verbose日志');
+    LogManager.d('这是一条Debug日志');
+    LogManager.i('这是一条Info日志');
+    LogManager.w('这是一条Warning日志');
+    LogManager.e('这是一条Error日志');
+    LogManager.f('这是一条Fatal日志');
 
     setState(() {
       _logInfo = '日志已输出，请查看控制台';
@@ -175,7 +175,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _getLogFiles() async {
-    final files = await LogUtil.getAllLogFiles();
+    final files = await LogManager.getAllLogFiles();
     setState(() {
       _logInfo = '日志文件数量: ${files.length}\n';
       for (var file in files) {
@@ -230,14 +230,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _compressLogs() async {
-    final zipFile = await LogUtil.compressLogs();
+    final zipFile = await LogManager.compressLogs();
     if (zipFile != null) {
       final size = zipFile.lengthSync();
       setState(() {
         _logInfo =
             '日志已压缩\n文件: ${zipFile.path}\n大小: ${(size / 1024).toStringAsFixed(2)} KB';
       });
-      LogUtil.i('日志压缩成功: ${zipFile.path}');
+      LogManager.i('日志压缩成功: ${zipFile.path}');
     } else {
       setState(() {
         _logInfo = '日志压缩失败';
@@ -246,11 +246,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _clearLogs() async {
-    await LogUtil.clearAllLogs();
+    await LogManager.clearAllLogs();
     setState(() {
       _logInfo = '所有日志已清空';
     });
-    LogUtil.i('日志已清空');
+    LogManager.i('日志已清空');
   }
 
   @override
@@ -356,7 +356,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 20),
             Text(
-              '日志目录: ${LogUtil.logDirectoryPath ?? "未初始化"}',
+              '日志目录: ${LogManager.logDirectoryPath ?? "未初始化"}',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],

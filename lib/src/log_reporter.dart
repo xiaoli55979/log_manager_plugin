@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'log_file_manager.dart';
-import 'log_util.dart';
+import 'log_manager.dart';
 import 'log_config.dart';
 
 /// 日志上报回调类型（文件方式）
@@ -89,7 +89,7 @@ class LogReporter {
     final shouldDelete =
         deleteAfterUpload ?? _config?.deleteAfterUpload ?? true;
     try {
-      LogUtil.i('开始压缩日志文件...');
+      LogManager.i('开始压缩日志文件...');
 
       // 压缩日志
       final File? zipFile;
@@ -101,41 +101,41 @@ class LogReporter {
       }
 
       if (zipFile == null) {
-        LogUtil.w('日志压缩失败：没有日志文件');
+        LogManager.w('日志压缩失败：没有日志文件');
         return false;
       }
 
-      LogUtil.i('日志压缩成功: ${zipFile.path}');
+      LogManager.i('日志压缩成功: ${zipFile.path}');
 
       // 检查是否设置了上报回调
       if (_uploadCallback == null) {
-        LogUtil.w('未设置日志上报回调，请先调用 LogReporter.instance.setUploadCallback()');
+        LogManager.w('未设置日志上报回调，请先调用 LogReporter.instance.setUploadCallback()');
         return false;
       }
 
       // 调用上报回调
-      LogUtil.i('开始上报日志...');
+      LogManager.i('开始上报日志...');
       final success = await _uploadCallback!(zipFile);
 
       if (success) {
-        LogUtil.i('日志上报成功');
+        LogManager.i('日志上报成功');
 
         // 上报成功后删除压缩文件
         if (shouldDelete) {
           try {
             await zipFile.delete();
-            LogUtil.d('已删除压缩文件: ${zipFile.path}');
+            LogManager.d('已删除压缩文件: ${zipFile.path}');
           } catch (e) {
-            LogUtil.w('删除压缩文件失败: $e');
+            LogManager.w('删除压缩文件失败: $e');
           }
         }
       } else {
-        LogUtil.e('日志上报失败');
+        LogManager.e('日志上报失败');
       }
 
       return success;
     } catch (e, stackTrace) {
-      LogUtil.e('日志上报异常', error: e, stackTrace: stackTrace);
+      LogManager.e('日志上报异常', error: e, stackTrace: stackTrace);
       return false;
     }
   }
@@ -150,43 +150,43 @@ class LogReporter {
     final shouldDelete =
         deleteAfterUpload ?? _config?.deleteAfterUpload ?? true;
     try {
-      LogUtil.i('开始压缩 $date 的日志...');
+      LogManager.i('开始压缩 $date 的日志...');
 
       final zipFile = await LogFileManager.instance.compressLogsByDate(date);
 
       if (zipFile == null) {
-        LogUtil.w('日志压缩失败：没有找到 $date 的日志文件');
+        LogManager.w('日志压缩失败：没有找到 $date 的日志文件');
         return false;
       }
 
-      LogUtil.i('日志压缩成功: ${zipFile.path}');
+      LogManager.i('日志压缩成功: ${zipFile.path}');
 
       if (_uploadCallback == null) {
-        LogUtil.w('未设置日志上报回调');
+        LogManager.w('未设置日志上报回调');
         return false;
       }
 
-      LogUtil.i('开始上报日志...');
+      LogManager.i('开始上报日志...');
       final success = await _uploadCallback!(zipFile);
 
       if (success) {
-        LogUtil.i('日志上报成功');
+        LogManager.i('日志上报成功');
 
         if (shouldDelete) {
           try {
             await zipFile.delete();
-            LogUtil.d('已删除压缩文件: ${zipFile.path}');
+            LogManager.d('已删除压缩文件: ${zipFile.path}');
           } catch (e) {
-            LogUtil.w('删除压缩文件失败: $e');
+            LogManager.w('删除压缩文件失败: $e');
           }
         }
       } else {
-        LogUtil.e('日志上报失败');
+        LogManager.e('日志上报失败');
       }
 
       return success;
     } catch (e, stackTrace) {
-      LogUtil.e('日志上报异常', error: e, stackTrace: stackTrace);
+      LogManager.e('日志上报异常', error: e, stackTrace: stackTrace);
       return false;
     }
   }
@@ -202,11 +202,11 @@ class LogReporter {
     final batchSize = maxBatchSize ?? _config?.maxBatchSize ?? 100 * 1024;
     try {
       if (_uploadStringCallback == null) {
-        LogUtil.w('未设置字符串上报回调，请先调用 setUploadStringCallback()');
+        LogManager.w('未设置字符串上报回调，请先调用 setUploadStringCallback()');
         return false;
       }
 
-      LogUtil.i('开始读取日志文件...');
+      LogManager.i('开始读取日志文件...');
 
       // 获取要上报的文件
       final List<File> files;
@@ -217,7 +217,7 @@ class LogReporter {
       }
 
       if (files.isEmpty) {
-        LogUtil.w('没有日志文件可上报');
+        LogManager.w('没有日志文件可上报');
         return false;
       }
 
@@ -261,29 +261,29 @@ class LogReporter {
             }
           }
         } catch (e) {
-          LogUtil.w('读取文件失败: ${file.path}, 错误: $e');
+          LogManager.w('读取文件失败: ${file.path}, 错误: $e');
         }
       }
 
       if (batches.isEmpty) {
-        LogUtil.w('没有可上报的日志内容');
+        LogManager.w('没有可上报的日志内容');
         return false;
       }
 
-      LogUtil.i('准备上报 ${batches.length} 批日志数据...');
+      LogManager.i('准备上报 ${batches.length} 批日志数据...');
 
       // 调用上报回调
       final success = await _uploadStringCallback!(batches);
 
       if (success) {
-        LogUtil.i('日志上报成功');
+        LogManager.i('日志上报成功');
       } else {
-        LogUtil.e('日志上报失败');
+        LogManager.e('日志上报失败');
       }
 
       return success;
     } catch (e, stackTrace) {
-      LogUtil.e('日志上报异常', error: e, stackTrace: stackTrace);
+      LogManager.e('日志上报异常', error: e, stackTrace: stackTrace);
       return false;
     }
   }
@@ -301,7 +301,7 @@ class LogReporter {
           allFiles.where((file) => file.path.contains('log_$date')).toList();
 
       if (dateFiles.isEmpty) {
-        LogUtil.w('没有找到 $date 的日志文件');
+        LogManager.w('没有找到 $date 的日志文件');
         return false;
       }
 
@@ -310,7 +310,7 @@ class LogReporter {
         specificFiles: dateFiles,
       );
     } catch (e, stackTrace) {
-      LogUtil.e('日志上报异常', error: e, stackTrace: stackTrace);
+      LogManager.e('日志上报异常', error: e, stackTrace: stackTrace);
       return false;
     }
   }

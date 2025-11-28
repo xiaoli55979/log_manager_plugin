@@ -1,8 +1,21 @@
-## 1.0.2
+## 1.0.3
 
-* Renamed `LogConfig` to `LogManagerConfig` to avoid naming conflicts
+* **Breaking Change**: Renamed `LogUtil` to `LogManager` to avoid naming conflicts
+* **Breaking Change**: Renamed `LogConfig` to `LogManagerConfig` to avoid naming conflicts
 * Improved documentation for multi-plugin usage scenarios
 * Added log level filtering explanation
+
+### Migration Guide
+
+```dart
+// Before
+await LogUtil.instance.init(const LogConfig(...));
+LogUtil.d('message');
+
+// After
+await LogManager.instance.init(const LogManagerConfig(...));
+LogManager.d('message');
+```
 
 ## 1.0.0
 

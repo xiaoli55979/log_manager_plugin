@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'log_util.dart';
+import 'log_manager.dart';
 
 /// Dio网络请求日志拦截器
 /// 用于记录HTTP请求和响应的详细信息
@@ -74,7 +74,7 @@ class LogManagerInterceptor extends Interceptor {
     }
 
     buffer.write('\n${'=' * 36} END ${'=' * 36}');
-    LogUtil.d(buffer.toString());
+    LogManager.d(buffer.toString());
   }
 
   void _logResponse(Response response) {
@@ -101,7 +101,7 @@ class LogManagerInterceptor extends Interceptor {
     }
 
     buffer.write('\n${'=' * 36} END ${'=' * 36}');
-    LogUtil.i(buffer.toString());
+    LogManager.i(buffer.toString());
   }
 
   void _logError(DioException err) {
@@ -120,7 +120,7 @@ class LogManagerInterceptor extends Interceptor {
     }
 
     buffer.write('\n${'=' * 36} END ${'=' * 36}');
-    LogUtil.e(buffer.toString(), error: err);
+    LogManager.e(buffer.toString(), error: err);
   }
 
   String _formatData(dynamic data) {

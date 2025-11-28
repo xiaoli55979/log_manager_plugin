@@ -7,11 +7,11 @@ import 'log_reporter.dart';
 import 'simple_log_printer.dart';
 
 /// 日志工具类
-class LogUtil {
-  static LogUtil? _instance;
-  static LogUtil get instance => _instance ??= LogUtil._();
+class LogManager {
+  static LogManager? _instance;
+  static LogManager get instance => _instance ??= LogManager._();
 
-  LogUtil._();
+  LogManager._();
 
   late Logger _logger;
   late LogManagerConfig _config;
@@ -25,11 +25,11 @@ class LogUtil {
   /// 示例：
   /// ```dart
   /// // 在 main.dart 中初始化
-  /// await LogUtil.instance.init(const LogManagerConfig(...));
+  /// await LogManager.instance.init(const LogManagerConfig(...));
   ///
   /// // 其他插件直接使用，无需再次初始化
-  /// LogUtil.d('插件A的日志');
-  /// LogUtil.i('插件B的日志');
+  /// LogManager.d('插件A的日志');
+  /// LogManager.i('插件B的日志');
   /// ```
   Future<void> init([LogManagerConfig? config]) async {
     _config = config ?? const LogManagerConfig();
