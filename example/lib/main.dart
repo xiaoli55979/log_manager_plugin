@@ -7,7 +7,7 @@ void main() async {
 
   // 初始化日志系统
   await LogUtil.instance.init(
-    const LogConfig(
+    const LogManagerConfig(
       enabled: true,
       enableConsoleInDebug: true,
       enableConsoleInRelease: false,

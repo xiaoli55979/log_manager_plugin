@@ -1,7 +1,7 @@
 import 'package:logger/logger.dart';
 
-/// 日志配置
-class LogConfig {
+/// 日志管理器配置
+class LogManagerConfig {
   /// 是否启用日志系统
   final bool enabled;
 
@@ -34,7 +34,7 @@ class LogConfig {
   /// 字符串上报时每批最大字符数（字节），默认100KB
   final int maxBatchSize;
 
-  const LogConfig({
+  const LogManagerConfig({
     this.enabled = true,
     this.enableConsoleInDebug = true,
     this.enableConsoleInRelease = false,
@@ -47,7 +47,7 @@ class LogConfig {
     this.maxBatchSize = 100 * 1024, // 100KB
   });
 
-  LogConfig copyWith({
+  LogManagerConfig copyWith({
     bool? enabled,
     bool? enableConsoleInDebug,
     bool? enableConsoleInRelease,
@@ -59,7 +59,7 @@ class LogConfig {
     bool? deleteAfterUpload,
     int? maxBatchSize,
   }) {
-    return LogConfig(
+    return LogManagerConfig(
       enabled: enabled ?? this.enabled,
       enableConsoleInDebug: enableConsoleInDebug ?? this.enableConsoleInDebug,
       enableConsoleInRelease:

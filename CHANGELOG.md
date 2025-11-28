@@ -1,3 +1,9 @@
+## 1.0.2
+
+* Renamed `LogConfig` to `LogManagerConfig` to avoid naming conflicts
+* Improved documentation for multi-plugin usage scenarios
+* Added log level filtering explanation
+
 ## 1.0.0
 
 * Initial release

@@ -57,7 +57,7 @@ class LogReporter {
   LogUploadStringCallback? _uploadStringCallback;
 
   /// 日志配置
-  LogConfig? _config;
+  LogManagerConfig? _config;
 
   /// 设置日志上报回调（文件方式）
   void setUploadCallback(LogUploadCallback callback) {
@@ -70,7 +70,7 @@ class LogReporter {
   }
 
   /// 设置配置
-  void setConfig(LogConfig config) {
+  void setConfig(LogManagerConfig config) {
     _config = config;
   }
 

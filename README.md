@@ -37,7 +37,7 @@ Flutter日志管理插件，支持控制台输出、文件存储、日志查看�
 
 ```yaml
 dependencies:
-  log_manager_plugin: ^1.0.0
+  log_manager_plugin: ^1.0.2
 ```
 
 ### 方式2：从 GitHub 安装
@@ -60,14 +60,17 @@ flutter pub get
 
 ### 初始化
 
+**重要：在主应用的 main.dart 中初始化一次即可，所有插件共享同一个日志实例。**
+
 ```dart
 import 'package:log_manager_plugin/log_manager_plugin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // 只需初始化一次
   await LogUtil.instance.init(
-    const LogConfig(
+    const LogManagerConfig(
       enabled: true,
       enableConsoleInDebug: true,
       enableConsoleInRelease: false,
@@ -217,12 +220,47 @@ await LogFileManager.instance.cleanLegacyLogFiles();
 
 ## 高级用法
 
+### 多插件项目使用
+
+如果你的项目中有多个插件都依赖 `log_manager_plugin`：
+
+```dart
+// ✅ 正确做法：只在主应用中初始化一次
+// main.dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LogUtil.instance.init(const LogManagerConfig(...));
+  runApp(const MyApp());
+}
+
+// plugin_a.dart - 插件A直接使用
+class PluginA {
+  void doSomething() {
+    LogUtil.d('插件A: 开始执行');
+    // ...
+  }
+}
+
+// plugin_b.dart - 插件B直接使用
+class PluginB {
+  void doSomething() {
+    LogUtil.i('插件B: 处理数据');
+    // ...
+  }
+}
+
+// ❌ 错误做法：不要在每个插件中都初始化
+// 这会导致配置被覆盖，且浪费资源
+```
+
+**说明**：即使未初始化就调用日志方法，也不会报错，只是不会输出日志。
+
 ### 运行时更新配置
 
 ```dart
 // 动态修改配置
 await LogUtil.instance.updateConfig(
-  LogConfig(
+  LogManagerConfig(
     enableConsoleInRelease: true,  // 临时开启Release日志
     logLevel: Level.trace,          // 调整日志级别
   ),
@@ -316,7 +354,7 @@ await LogReporter.instance.uploadLogsAsString(
 ```dart
 // 在初始化时统一配置
 await LogUtil.instance.init(
-  const LogConfig(
+  const LogManagerConfig(
     deleteAfterUpload: false,  // 默认保留压缩文件
     maxBatchSize: 200 * 1024,  // 默认每批200KB
   ),
@@ -345,12 +383,38 @@ await LogReporter.instance.uploadLogs(
 
 ## 日志级别
 
-- `Level.trace` - 追踪
+日志级别从低到高：
+
+- `Level.trace` - 追踪（最详细）
 - `Level.debug` - 调试
 - `Level.info` - 信息
 - `Level.warning` - 警告
 - `Level.error` - 错误
-- `Level.fatal` - 致命
+- `Level.fatal` - 致命（最严重）
+
+### 级别过滤规则
+
+配置的 `logLevel` 会同时影响控制台和文件输出：
+
+```dart
+const LogManagerConfig(
+  logLevel: Level.warning,  // 只输出 warning、error、fatal
+)
+
+// 这些日志会被过滤掉（不输出到控制台和文件）
+LogUtil.v('trace 日志');   // ❌ 被过滤
+LogUtil.d('debug 日志');   // ❌ 被过滤
+LogUtil.i('info 日志');    // ❌ 被过滤
+
+// 这些日志会正常输出
+LogUtil.w('warning 日志'); // ✅ 输出
+LogUtil.e('error 日志');   // ✅ 输出
+LogUtil.f('fatal 日志');   // ✅ 输出
+```
+
+**建议配置**：
+- **开发环境**：`Level.debug` 或 `Level.trace` - 查看详细信息
+- **生产环境**：`Level.info` 或 `Level.warning` - 只记录重要信息，减少日志量
 
 ## 文件管理策略
 
@@ -371,7 +435,7 @@ void main() async {
   
   // 1. 初始化日志系统
   await LogUtil.instance.init(
-    const LogConfig(
+    const LogManagerConfig(
       enabled: true,
       enableConsoleInDebug: true,
       enableConsoleInRelease: false,
@@ -470,45 +534,76 @@ class MyApp extends StatelessWidget {
 
 ## 常见问题
 
-### 1. 日志文件存储在哪里？
+### 1. 多个插件都使用这个日志插件，需要每个插件都初始化吗？
+
+**不需要！** 只在主应用的 `main.dart` 中初始化一次即可。
+
+```dart
+// 主应用 main.dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LogUtil.instance.init(const LogManagerConfig(...));  // 只初始化一次
+  runApp(const MyApp());
+}
+
+// 插件A、插件B、插件C... 直接使用
+LogUtil.d('来自插件A的日志');
+LogUtil.i('来自插件B的日志');
+```
+
+所有插件共享同一个日志实例，日志会统一管理和存储。
+
+### 2. 日志文件存储在哪里？
 
 - **iOS**: `Application Support/logs/`
 - **Android**: `应用数据目录/logs/`
 
 可以通过 `LogUtil.logDirectoryPath` 获取完整路径。
 
-### 2. 如何在Release模式下查看日志？
+### 3. 如何在Release模式下查看日志？
 
 ```dart
 await LogUtil.instance.init(
-  const LogConfig(
+  const LogManagerConfig(
     enableConsoleInRelease: true,  // 开启Release控制台输出
   ),
 );
 ```
 
-### 3. 日志文件太大怎么办？
+### 4. 日志文件太大怎么办？
 
 调整配置参数：
 
 ```dart
-const LogConfig(
+const LogManagerConfig(
   maxFileSize: 5 * 1024 * 1024,  // 减小单文件大小到5MB
   maxRetentionDays: 3,            // 只保留3天
 )
 ```
 
-### 4. 如何只上报错误日志？
+### 5. 如何只记录/上报错误日志？
 
-可以在上报前筛选文件，或者在应用层面控制日志级别：
+**方法1：配置日志级别（推荐）**
 
 ```dart
-const LogConfig(
-  logLevel: Level.error,  // 只记录error及以上级别
+const LogManagerConfig(
+  logLevel: Level.error,  // 只记录 error 和 fatal
 )
 ```
 
-### 5. 上报失败怎么办？
+这样只有 `LogUtil.e()` 和 `LogUtil.f()` 的日志会被写入文件。
+
+**方法2：运行时动态调整**
+
+```dart
+// 正常情况记录所有日志
+await LogUtil.instance.init(const LogManagerConfig(logLevel: Level.debug));
+
+// 生产环境只记录错误
+await LogUtil.instance.updateConfig(const LogManagerConfig(logLevel: Level.error));
+```
+
+### 6. 上报失败怎么办？
 
 日志文件会保留在本地，可以稍后重试：
 
@@ -523,8 +618,9 @@ final success = await LogReporter.instance.uploadLogs(
 1. **初始化时机**：必须在 `WidgetsFlutterBinding.ensureInitialized()` 之后初始化
 2. **文件权限**：iOS/Android 会自动处理，无需额外配置
 3. **性能影响**：文件写入是异步的，不会阻塞主线程
-4. **日志安全**：上报前建议加密敏感信息
-5. **网络请求**：Dio拦截器会记录完整请求响应，注意数据量
+4. **日志级别**：`logLevel` 配置会同时过滤控制台和文件输出，低于该级别的日志不会被记录
+5. **日志安全**：上报前建议加密敏感信息
+6. **网络请求**：Dio拦截器会记录完整请求响应，注意数据量
 
 ## License
 

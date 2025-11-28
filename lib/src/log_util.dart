@@ -14,12 +14,25 @@ class LogUtil {
   LogUtil._();
 
   late Logger _logger;
-  late LogConfig _config;
+  late LogManagerConfig _config;
   bool _initialized = false;
 
   /// 初始化日志系统
-  Future<void> init([LogConfig? config]) async {
-    _config = config ?? const LogConfig();
+  ///
+  /// 注意：在多插件项目中，只需在主应用中初始化一次
+  /// 重复调用会使用新配置重新初始化
+  ///
+  /// 示例：
+  /// ```dart
+  /// // 在 main.dart 中初始化
+  /// await LogUtil.instance.init(const LogManagerConfig(...));
+  ///
+  /// // 其他插件直接使用，无需再次初始化
+  /// LogUtil.d('插件A的日志');
+  /// LogUtil.i('插件B的日志');
+  /// ```
+  Future<void> init([LogManagerConfig? config]) async {
+    _config = config ?? const LogManagerConfig();
 
     if (!_config.enabled) {
       _initialized = false;
@@ -61,7 +74,7 @@ class LogUtil {
   }
 
   /// 更新配置
-  Future<void> updateConfig(LogConfig config) async {
+  Future<void> updateConfig(LogManagerConfig config) async {
     await init(config);
   }
 
@@ -121,7 +134,7 @@ class LogUtil {
       LogFileManager.instance.logDirectoryPath;
 
   /// 获取当前配置
-  static LogConfig get config => instance._config;
+  static LogManagerConfig get config => instance._config;
 }
 
 /// 自定义多输出类
