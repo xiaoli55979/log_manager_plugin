@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive_io.dart';
@@ -40,7 +41,7 @@ class LogFileManager {
     try {
       await _cleanOldLogFiles();
     } catch (e) {
-      print('清理旧日志文件时出错（已忽略）: $e');
+      debugPrint('清理旧日志文件时出错（已忽略）: $e');
     }
   }
 
@@ -113,7 +114,7 @@ class LogFileManager {
       );
       _currentFileSize += bytes;
     } catch (e) {
-      print('写入日志文件失败: $e');
+      debugPrint('写入日志文件失败: $e');
     }
   }
 
@@ -190,14 +191,14 @@ class LogFileManager {
             // 如果文件日期早于截止日期，删除
             if (fileDate.isBefore(cutoffDate)) {
               await file.delete();
-              print('删除过期日志文件: $fileName');
+              debugPrint('删除过期日志文件: $fileName');
             }
           } else {
-            print('无法解析日志文件日期: $fileName (日期格式: $dateStr)');
+            debugPrint('无法解析日志文件日期: $fileName (日期格式: $dateStr)');
           }
         }
       } catch (e) {
-        print('清理日志文件失败: $e');
+        debugPrint('清理日志文件失败: $e');
       }
     }
   }
@@ -244,11 +245,11 @@ class LogFileManager {
             }
             groupedFiles[dateStr]!.add(file);
           } else {
-            print('日志文件日期格式错误: $fileName (日期: $dateStr)');
+            debugPrint('日志文件日期格式错误: $fileName (日期: $dateStr)');
           }
         }
       } catch (e) {
-        print('解析日志文件日期失败: $e');
+        debugPrint('解析日志文件日期失败: $e');
       }
     }
 
@@ -263,7 +264,7 @@ class LogFileManager {
 
       return await compressSpecificLogs(files);
     } catch (e) {
-      print('压缩日志文件失败: $e');
+      debugPrint('压缩日志文件失败: $e');
       return null;
     }
   }
@@ -290,7 +291,7 @@ class LogFileManager {
 
       return zipFile;
     } catch (e) {
-      print('压缩指定日志文件失败: $e');
+      debugPrint('压缩指定日志文件失败: $e');
       return null;
     }
   }
@@ -306,7 +307,7 @@ class LogFileManager {
 
       return await compressSpecificLogs(dateFiles);
     } catch (e) {
-      print('压缩指定日期日志失败: $e');
+      debugPrint('压缩指定日期日志失败: $e');
       return null;
     }
   }
@@ -318,7 +319,7 @@ class LogFileManager {
       try {
         await file.delete();
       } catch (e) {
-        print('删除日志文件失败: $e');
+        debugPrint('删除日志文件失败: $e');
       }
     }
     await _createNewLogFile();
@@ -333,9 +334,9 @@ class LogFileManager {
     for (final file in dateFiles) {
       try {
         await file.delete();
-        print('删除日志文件: ${file.path.split('/').last}');
+        debugPrint('删除日志文件: ${file.path.split('/').last}');
       } catch (e) {
-        print('删除日志文件失败: $e');
+        debugPrint('删除日志文件失败: $e');
       }
     }
   }
@@ -354,12 +355,12 @@ class LogFileManager {
             RegExp(r'log_(\d{8})_(\d{6})\.txt$').firstMatch(fileName);
 
         if (legacyMatch != null) {
-          print('发现旧格式日志文件: $fileName，将在下次清理时删除');
+          debugPrint('发现旧格式日志文件: $fileName，将在下次清理时删除');
           // 可以选择立即删除或标记为待删除
           // await file.delete();
         }
       } catch (e) {
-        print('检查旧格式日志文件失败: $e');
+        debugPrint('检查旧格式日志文件失败: $e');
       }
     }
   }
@@ -378,7 +379,7 @@ class LogFileManager {
         final stat = await file.stat();
         totalSize += stat.size;
       } catch (e) {
-        print('获取文件大小失败: $e');
+        debugPrint('获取文件大小失败: $e');
       }
     }
 

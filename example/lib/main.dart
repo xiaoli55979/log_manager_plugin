@@ -15,10 +15,9 @@ void main() async {
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxRetentionDays: 7, // 保留7天
       logLevel: Level.debug,
-      logDirectory: 'logs', 
+      logDirectory: 'logs',
     ),
   );
-
 
   // 方式1：文件上传方式
   LogReporter.instance.setUploadCallback((zipFile) async {
@@ -185,24 +184,6 @@ class _HomePageState extends State<HomePage> {
         _logInfo += '$fileName (${(size / 1024).toStringAsFixed(2)} KB)\n';
       }
     });
-  }
-
-  void _openLogViewer() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const LogViewerPage(),
-      ),
-    );
-  }
-
-  void _openEnhancedLogViewer() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const EnhancedLogViewer(),
-      ),
-    );
   }
 
   void _openLogViewerByDate() {

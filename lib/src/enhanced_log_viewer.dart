@@ -353,7 +353,7 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
                   children: [
                     Icon(Icons.storage, size: 14, color: Colors.grey[600]),
                     const SizedBox(width: 4),
-                    Text('${_formatFileSize(size)}'),
+                    Text(_formatFileSize(size)),
                   ],
                 ),
                 if (modified != null)

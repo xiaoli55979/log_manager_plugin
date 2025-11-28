@@ -33,11 +33,27 @@ Flutter日志管理插件，支持控制台输出、文件存储、日志查看�
 
 ## 安装
 
+### 方式1：从 pub.dev 安装（推荐）
+
+```yaml
+dependencies:
+  log_manager_plugin: ^1.0.0
+```
+
+### 方式2：从 GitHub 安装
+
 ```yaml
 dependencies:
   log_manager_plugin:
     git:
-      url: your_git_url
+      url: https://github.com/xiaoli55979/log_manager_plugin.git
+      ref: main  # 或指定 tag: v1.0.0
+```
+
+然后运行：
+
+```bash
+flutter pub get
 ```
 
 ## 快速开始

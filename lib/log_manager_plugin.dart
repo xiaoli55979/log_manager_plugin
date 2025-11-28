@@ -1,5 +1,3 @@
-library log_manager_plugin;
-
 export 'src/log_config.dart';
 export 'src/log_util.dart';
 export 'src/log_file_manager.dart';
