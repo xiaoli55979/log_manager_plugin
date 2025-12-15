@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -56,6 +58,18 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
           final size = await zipFile.length();
           _showMessage(
               '压缩成功！\n文件: ${zipFile.path.split('/').last}\n大小: ${_formatFileSize(size)}');
+
+          // 延迟一下确保文件完全创建，然后弹出系统分享
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (mounted) {
+            try {
+              await LogFileManager.instance
+                  .shareCompressedLog(zipFile, context: context);
+            } catch (e) {
+              debugPrint('分享失败: $e');
+              _showMessage('分享失败: $e');
+            }
+          }
         }
       } else {
         _showMessage('压缩失败');
@@ -78,6 +92,18 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
           final size = await zipFile.length();
           _showMessage(
               '压缩成功！\n文件: ${zipFile.path.split('/').last}\n大小: ${_formatFileSize(size)}');
+
+          // 延迟一下确保文件完全创建，然后弹出系统分享
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (mounted) {
+            try {
+              await LogFileManager.instance
+                  .shareCompressedLog(zipFile, context: context);
+            } catch (e) {
+              debugPrint('分享失败: $e');
+              _showMessage('分享失败: $e');
+            }
+          }
         }
       } else {
         _showMessage('压缩失败');
@@ -333,9 +359,7 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           elevation: isSelected ? 4 : 1,
-          color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer
-              : null,
+          color: isSelected ? Colors.blue.shade50 : null,
           child: ListTile(
             leading: Checkbox(
               value: isSelected,
@@ -343,7 +367,11 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
             ),
             title: Text(
               fileName,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.blue.shade900 : null,
+              ),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,18 +379,38 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.storage, size: 14, color: Colors.grey[600]),
+                    Icon(
+                      Icons.storage,
+                      size: 14,
+                      color:
+                          isSelected ? Colors.blue.shade700 : Colors.grey[600],
+                    ),
                     const SizedBox(width: 4),
-                    Text(_formatFileSize(size)),
+                    Text(
+                      _formatFileSize(size),
+                      style: TextStyle(
+                        color: isSelected ? Colors.blue.shade800 : null,
+                      ),
+                    ),
                   ],
                 ),
                 if (modified != null)
                   Row(
                     children: [
-                      Icon(Icons.access_time,
-                          size: 14, color: Colors.grey[600]),
+                      Icon(
+                        Icons.access_time,
+                        size: 14,
+                        color: isSelected
+                            ? Colors.blue.shade700
+                            : Colors.grey[600],
+                      ),
                       const SizedBox(width: 4),
-                      Text(DateFormat('yyyy-MM-dd HH:mm:ss').format(modified)),
+                      Text(
+                        DateFormat('yyyy-MM-dd HH:mm:ss').format(modified),
+                        style: TextStyle(
+                          color: isSelected ? Colors.blue.shade800 : null,
+                        ),
+                      ),
                     ],
                   ),
               ],
@@ -465,7 +513,28 @@ class _EnhancedLogContentViewerState extends State<EnhancedLogContentViewer> {
   Future<void> _loadContent() async {
     setState(() => _isLoading = true);
     try {
-      final content = await widget.file.readAsString();
+      // 检查文件是否存在
+      if (!await widget.file.exists()) {
+        throw Exception('文件不存在');
+      }
+
+      // 使用 readAsBytes 然后解码，可以更好地处理编码错误
+      final bytes = await widget.file.readAsBytes();
+      String content;
+
+      try {
+        // 尝试使用 UTF-8 解码
+        content = utf8.decode(bytes, allowMalformed: true);
+      } catch (e) {
+        // 如果 UTF-8 解码失败，尝试使用 Latin1 解码
+        try {
+          content = latin1.decode(bytes);
+        } catch (e2) {
+          // 如果都失败，使用错误替换策略
+          content = utf8.decode(bytes, allowMalformed: true);
+        }
+      }
+
       final entries = _parseLogContent(content);
       setState(() {
         _logEntries = entries;
@@ -563,7 +632,10 @@ class _EnhancedLogContentViewerState extends State<EnhancedLogContentViewer> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(fileName),
+        title: Text(
+          fileName,
+          style: const TextStyle(color: Colors.black),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

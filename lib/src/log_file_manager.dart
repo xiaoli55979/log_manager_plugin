@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive_io.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// 日志文件管理器 - 按天管理日志文件
 class LogFileManager {
@@ -46,43 +48,50 @@ class LogFileManager {
   }
 
   /// 初始化当前日志文件
+  ///
+  /// 每次应用启动时都会创建新的日志文件，避免单日日志过长
   Future<void> _initCurrentLogFile() async {
     if (_logDirectory == null) return;
 
     final today = DateFormat('yyyyMMdd').format(DateTime.now());
     _currentDate = today;
 
-    // 查找今天的日志文件
-    final todayFiles = await _getTodayLogFiles();
-
-    if (todayFiles.isNotEmpty) {
-      // 检查最后一个文件是否还有空间
-      final latestFile = todayFiles.last;
-      final stat = await latestFile.stat();
-      if (stat.size < _maxFileSize) {
-        _currentLogFile = latestFile;
-        _currentFileSize = stat.size;
-        return;
-      }
-    }
-
-    // 创建新文件
+    // 每次启动都创建新文件，不检查现有文件
     await _createNewLogFile();
   }
 
   /// 创建新的日志文件
+  ///
+  /// 文件名格式: log_20231128_120530_001.txt (日期_时间_序号)
+  /// 每次应用启动都会创建新文件，使用时间戳确保唯一性
   Future<void> _createNewLogFile() async {
     if (_logDirectory == null) return;
 
-    final today = DateFormat('yyyyMMdd').format(DateTime.now());
+    final now = DateTime.now();
+    final today = DateFormat('yyyyMMdd').format(now);
+    final time = DateFormat('HHmmss').format(now);
     _currentDate = today;
 
-    // 查找今天已有的文件数量
-    final todayFiles = await _getTodayLogFiles();
-    final fileIndex = todayFiles.length + 1;
+    // 查找今天同一时间戳的文件数量（处理同一秒内多次创建的情况）
+    final timePrefix = 'log_${today}_$time';
+    final dir = Directory(_logDirectory!);
+    int fileIndex = 1;
 
-    // 文件名格式: log_20231128_001.txt, log_20231128_002.txt
-    final fileName = 'log_${today}_${fileIndex.toString().padLeft(3, '0')}.txt';
+    if (await dir.exists()) {
+      final existingFiles = await dir.list().where((entity) {
+        if (entity is! File || !entity.path.endsWith('.txt')) {
+          return false;
+        }
+        final fileName = entity.path.split('/').last;
+        return fileName.startsWith(timePrefix);
+      }).toList();
+
+      fileIndex = existingFiles.length + 1;
+    }
+
+    // 文件名格式: log_20231128_120530_001.txt
+    final fileName =
+        '${timePrefix}_${fileIndex.toString().padLeft(3, '0')}.txt';
     _currentLogFile = File('$_logDirectory/$fileName');
     _currentFileSize = 0;
   }
@@ -118,7 +127,11 @@ class LogFileManager {
     }
   }
 
-  /// 获取今天的日志文件（只返回新格式的文件）
+  /// 获取今天的日志文件（支持新旧两种格式）
+  /// 
+  /// 注意：此方法现在主要用于兼容性，因为每次启动都会创建新文件
+  // ignore: unused_element
+  @Deprecated('每次启动都创建新文件，此方法不再使用')
   Future<List<File>> _getTodayLogFiles() async {
     if (_logDirectory == null) return [];
 
@@ -134,10 +147,11 @@ class LogFileManager {
           }
 
           final fileName = entity.path.split('/').last;
-          // 只匹配新格式: log_20231128_001.txt
-          // 排除旧格式: log_20231128_120530.txt
+          // 匹配新格式: log_20231128_120530_001.txt (日期_时间_序号)
+          // 也兼容旧格式: log_20231128_001.txt (日期_序号)
           final newFormatMatch =
-              RegExp(r'log_' + today + r'_(\d{3})\.txt$').hasMatch(fileName);
+              RegExp(r'log_' + today + r'_(\d{6}_\d{3}|\d{3})\.txt$')
+                  .hasMatch(fileName);
           return newFormatMatch;
         })
         .map((entity) => entity as File)
@@ -175,9 +189,10 @@ class LogFileManager {
     for (final file in files) {
       try {
         // 从文件名中提取日期
-        // 支持两种格式:
-        // 1. log_20231128_001.txt (新格式)
-        // 2. log_20231128_120530.txt (旧格式，时间戳)
+        // 支持多种格式:
+        // 1. log_20231128_120530_001.txt (最新格式：日期_时间_序号)
+        // 2. log_20231128_001.txt (旧格式：日期_序号)
+        // 3. log_20231128_120530.txt (更旧格式：日期_时间)
         final fileName = file.path.split('/').last;
         final dateMatch = RegExp(r'log_(\d{8})_').firstMatch(fileName);
 
@@ -349,8 +364,9 @@ class LogFileManager {
       try {
         final fileName = file.path.split('/').last;
 
-        // 检查是否是旧格式: log_20231128_120530.txt (时间戳格式)
-        // 新格式是: log_20231128_001.txt (序号格式)
+        // 检查是否是旧格式: log_20231128_120530.txt (日期_时间，无序号)
+        // 新格式是: log_20231128_120530_001.txt (日期_时间_序号)
+        // 或: log_20231128_001.txt (日期_序号)
         final legacyMatch =
             RegExp(r'log_(\d{8})_(\d{6})\.txt$').firstMatch(fileName);
 
@@ -367,6 +383,31 @@ class LogFileManager {
 
   /// 获取日志目录路径
   String? get logDirectoryPath => _logDirectory;
+
+  /// 获取所有压缩文件（.zip文件）
+  Future<List<File>> getCompressedFiles() async {
+    if (_logDirectory == null) return [];
+
+    final dir = Directory(_logDirectory!);
+    if (!await dir.exists()) return [];
+
+    final files = await dir
+        .list()
+        .where((entity) => entity is File && entity.path.endsWith('.zip'))
+        .map((entity) => entity as File)
+        .toList();
+
+    // 按修改时间倒序排列（最新的在前）
+    final filesWithStat = await Future.wait(
+      files.map((file) async {
+        final stat = await file.stat();
+        return (file: file, modified: stat.modified);
+      }),
+    );
+
+    filesWithStat.sort((a, b) => b.modified.compareTo(a.modified));
+    return filesWithStat.map((item) => item.file).toList();
+  }
 
   /// 获取日志统计信息
   Future<LogStatistics> getStatistics() async {
@@ -394,6 +435,114 @@ class LogFileManager {
           ? null
           : groupedFiles.keys.reduce((a, b) => a.compareTo(b) > 0 ? a : b),
     );
+  }
+
+  /// 分享压缩的日志文件
+  ///
+  /// [context] 可选的 BuildContext，用于在 iPad 上设置分享位置
+  Future<void> shareCompressedLog(File zipFile, {BuildContext? context}) async {
+    try {
+      if (!await zipFile.exists()) {
+        debugPrint('分享失败：压缩文件不存在');
+        return;
+      }
+
+      final fileName = zipFile.path.split('/').last;
+      final xFile = XFile(zipFile.path, name: fileName);
+
+      // 获取分享位置（iPad 需要）- 在异步操作之前获取
+      Rect? sharePositionOrigin;
+      if (context != null && context.mounted) {
+        final RenderBox? box = context.findRenderObject() as RenderBox?;
+        if (box != null && box.hasSize) {
+          final size = box.size;
+          final offset = box.localToGlobal(Offset.zero);
+          sharePositionOrigin = Rect.fromLTWH(
+            offset.dx,
+            offset.dy,
+            size.width,
+            size.height,
+          );
+        } else {
+          // 如果无法获取位置，使用屏幕中心
+          final mediaQuery = MediaQuery.maybeOf(context);
+          if (mediaQuery != null) {
+            final screenSize = mediaQuery.size;
+            sharePositionOrigin = Rect.fromLTWH(
+              screenSize.width / 2,
+              screenSize.height / 2,
+              0,
+              0,
+            );
+          }
+        }
+      }
+
+      // ignore: deprecated_member_use
+      await Share.shareXFiles(
+        [xFile],
+        subject: '日志文件',
+        text: '日志压缩文件：$fileName',
+        sharePositionOrigin: sharePositionOrigin,
+      );
+    } catch (e) {
+      debugPrint('分享压缩日志文件失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 分享单个日志文件
+  ///
+  /// [context] 可选的 BuildContext，用于在 iPad 上设置分享位置
+  Future<void> shareLogFile(File logFile, {BuildContext? context}) async {
+    try {
+      if (!await logFile.exists()) {
+        debugPrint('分享失败：日志文件不存在');
+        return;
+      }
+
+      final fileName = logFile.path.split('/').last;
+      final xFile = XFile(logFile.path, name: fileName);
+
+      // 获取分享位置（iPad 需要）- 在异步操作之前获取
+      Rect? sharePositionOrigin;
+      if (context != null && context.mounted) {
+        final RenderBox? box = context.findRenderObject() as RenderBox?;
+        if (box != null && box.hasSize) {
+          final size = box.size;
+          final offset = box.localToGlobal(Offset.zero);
+          sharePositionOrigin = Rect.fromLTWH(
+            offset.dx,
+            offset.dy,
+            size.width,
+            size.height,
+          );
+        } else {
+          // 如果无法获取位置，使用屏幕中心
+          final mediaQuery = MediaQuery.maybeOf(context);
+          if (mediaQuery != null) {
+            final screenSize = mediaQuery.size;
+            sharePositionOrigin = Rect.fromLTWH(
+              screenSize.width / 2,
+              screenSize.height / 2,
+              0,
+              0,
+            );
+          }
+        }
+      }
+
+      // ignore: deprecated_member_use
+      await Share.shareXFiles(
+        [xFile],
+        subject: '日志文件',
+        text: '日志文件：$fileName',
+        sharePositionOrigin: sharePositionOrigin,
+      );
+    } catch (e) {
+      debugPrint('分享日志文件失败: $e');
+      rethrow;
+    }
   }
 }
 

@@ -57,69 +57,80 @@ class LogManagerInterceptor extends Interceptor {
 
   void _logRequest(RequestOptions options) {
     final buffer = StringBuffer();
-    buffer.write('${'=' * 35} START ${'=' * 35}\n');
-    buffer.write('📤 REQUEST ${options.method} ${options.uri}\n');
+    buffer.write('\n${'=' * 35} START ${'=' * 35}\n');
+    buffer.write(_addBorder('📤 REQUEST ${options.method} ${options.uri}'));
+    buffer.write('\n');
 
     if (requestHeader && options.headers.isNotEmpty) {
-      buffer.write('Headers:\n');
+      buffer.write(_addBorder('Headers:'));
+      buffer.write('\n');
       options.headers.forEach((key, value) {
-        buffer.write('  $key: $value\n');
+        buffer.write(_addBorder('  $key: $value'));
+        buffer.write('\n');
       });
     }
 
     if (requestBody && options.data != null) {
-      buffer.write('Body:\n');
+      buffer.write(_addBorder('Body:'));
+      buffer.write('\n');
       final data = _formatData(options.data);
-      buffer.write('  $data\n');
+      buffer.write(_formatBody(data));
+      buffer.write('\n');
     }
 
-    buffer.write('\n${'=' * 36} END ${'=' * 36}');
+    buffer.write('${'=' * 36} END ${'=' * 36}\n');
     LogManager.d(buffer.toString());
   }
 
   void _logResponse(Response response) {
     final buffer = StringBuffer();
-    buffer.write('${'=' * 35} START ${'=' * 35}\n');
-    buffer.write(
-        '📥 RESPONSE ${response.statusCode} ${response.requestOptions.uri}\n');
+    buffer.write('\n${'=' * 35} START ${'=' * 35}\n');
+    buffer.write(_addBorder(
+        '📥 RESPONSE ${response.statusCode} ${response.requestOptions.uri}'));
+    buffer.write('\n');
 
     if (responseHeader && response.headers.map.isNotEmpty) {
-      buffer.write('Headers:\n');
+      buffer.write(_addBorder('Headers:'));
+      buffer.write('\n');
       response.headers.map.forEach((key, value) {
-        buffer.write('  $key: ${value.join(', ')}\n');
+        buffer.write(_addBorder('  $key: ${value.join(', ')}'));
+        buffer.write('\n');
       });
     }
 
     if (responseBody && response.data != null) {
-      buffer.write('Body:\n');
+      buffer.write(_addBorder('Body:'));
+      buffer.write('\n');
       final data = _formatData(response.data);
-      if (compact && data.length > maxWidth) {
-        buffer.write('  ${data.substring(0, maxWidth)}...\n');
-      } else {
-        buffer.write('  $data\n');
-      }
+      buffer.write(_formatBody(data));
+      buffer.write('\n');
     }
 
-    buffer.write('\n${'=' * 36} END ${'=' * 36}');
+    buffer.write('${'=' * 36} END ${'=' * 36}\n');
     LogManager.i(buffer.toString());
   }
 
   void _logError(DioException err) {
     final buffer = StringBuffer();
-    buffer.write('${'=' * 35} START ${'=' * 35}\n');
-    buffer.write('❌ ERROR ${err.type} ${err.requestOptions.uri}\n');
-    buffer.write('Message: ${err.message}\n');
+    buffer.write('\n${'=' * 35} START ${'=' * 35}\n');
+    buffer.write(_addBorder('❌ ERROR ${err.type} ${err.requestOptions.uri}'));
+    buffer.write('\n');
+    buffer.write(_addBorder('Message: ${err.message}'));
+    buffer.write('\n');
 
     if (err.response != null) {
-      buffer.write('Status Code: ${err.response?.statusCode}\n');
+      buffer.write(_addBorder('Status Code: ${err.response?.statusCode}'));
+      buffer.write('\n');
       if (responseBody && err.response?.data != null) {
-        buffer.write('Response:\n');
+        buffer.write(_addBorder('Response:'));
+        buffer.write('\n');
         final data = _formatData(err.response?.data);
-        buffer.write('  $data\n');
+        buffer.write(_formatBody(data));
+        buffer.write('\n');
       }
     }
 
-    buffer.write('\n${'=' * 36} END ${'=' * 36}');
+    buffer.write('${'=' * 36} END ${'=' * 36}\n');
     LogManager.e(buffer.toString(), error: err);
   }
 
@@ -129,5 +140,30 @@ class LogManagerInterceptor extends Interceptor {
       return data.toString();
     }
     return data.toString();
+  }
+
+  /// 给每一行添加左边框
+  String _addBorder(String text, {String prefix = '║ '}) {
+    return text.split('\n').map((line) => '$prefix$line').join('\n');
+  }
+
+  /// 格式化并添加边框的 Body 内容（处理超长内容）
+  String _formatBody(String data, {int indent = 2}) {
+    final prefix = ' ' * indent;
+    final lines = <String>[];
+
+    // 如果内容很长，按合理长度分行
+    const maxLineLength = 100;
+    if (data.length > maxLineLength) {
+      for (int i = 0; i < data.length; i += maxLineLength) {
+        final end =
+            (i + maxLineLength < data.length) ? i + maxLineLength : data.length;
+        lines.add('$prefix${data.substring(i, end)}');
+      }
+    } else {
+      lines.add('$prefix$data');
+    }
+
+    return lines.map((line) => _addBorder(line)).join('\n');
   }
 }

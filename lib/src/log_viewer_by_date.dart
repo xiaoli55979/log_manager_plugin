@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'log_file_manager.dart';
@@ -62,6 +63,18 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
           final size = await zipFile.length();
           _showMessage(
               '压缩成功！\n文件: ${zipFile.path.split('/').last}\n大小: ${_formatFileSize(size)}');
+
+          // 延迟一下确保文件完全创建，然后弹出系统分享
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (mounted) {
+            try {
+              await LogFileManager.instance
+                  .shareCompressedLog(zipFile, context: context);
+            } catch (e) {
+              debugPrint('分享失败: $e');
+              _showMessage('分享失败: $e');
+            }
+          }
         }
       } else {
         _showMessage('压缩失败');
@@ -178,6 +191,11 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
       appBar: AppBar(
         title: const Text('按日期查看日志'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_zip),
+            onPressed: _showCompressedFiles,
+            tooltip: '查看压缩文件',
+          ),
           if (_logsByDate.isNotEmpty)
             IconButton(
               icon: Icon(_selectedDates.length == _logsByDate.length
@@ -306,9 +324,7 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           elevation: isSelected ? 4 : 1,
-          color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer
-              : null,
+          color: isSelected ? Colors.blue.shade50 : null,
           child: ExpansionTile(
             leading: Checkbox(
               value: isSelected,
@@ -316,10 +332,17 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
             ),
             title: Text(
               _formatDate(date),
-              style: const TextStyle(fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.blue.shade900 : null,
+              ),
             ),
-            subtitle:
-                Text('${files.length} 个文件 · ${_formatFileSize(totalSize)}'),
+            subtitle: Text(
+              '${files.length} 个文件 · ${_formatFileSize(totalSize)}',
+              style: TextStyle(
+                color: isSelected ? Colors.blue.shade800 : null,
+              ),
+            ),
             children: files.map((file) => _buildFileItem(file)).toList(),
           ),
         );
@@ -340,9 +363,22 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
           leading: const Icon(Icons.description, size: 20),
           title: Text(fileName, style: const TextStyle(fontSize: 13)),
           subtitle: Text(_formatFileSize(size)),
-          trailing: IconButton(
-            icon: const Icon(Icons.visibility, size: 20),
-            onPressed: () => _viewFile(file),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Builder(
+                builder: (buttonContext) => IconButton(
+                  icon: const Icon(Icons.share, size: 20),
+                  onPressed: () => _shareFile(file, buttonContext),
+                  tooltip: '分享',
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.visibility, size: 20),
+                onPressed: () => _viewFile(file),
+                tooltip: '查看',
+              ),
+            ],
           ),
           onTap: () => _viewFile(file),
         );
@@ -368,6 +404,50 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
       context,
       MaterialPageRoute(
         builder: (context) => EnhancedLogContentViewer(file: file),
+      ),
+    );
+  }
+
+  Future<void> _shareFile(File file, BuildContext buttonContext) async {
+    try {
+      await LogFileManager.instance.shareLogFile(file, context: buttonContext);
+    } catch (e) {
+      debugPrint('分享日志文件失败: $e');
+      if (mounted) {
+        _showMessage('分享失败: $e');
+      }
+    }
+  }
+
+  Future<void> _showCompressedFiles() async {
+    final compressedFiles = await LogFileManager.instance.getCompressedFiles();
+
+    if (!mounted) return;
+
+    if (compressedFiles.isEmpty) {
+      _showMessage('暂无压缩文件');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => _CompressedFilesDialog(
+        files: compressedFiles,
+        onShare: (file, buttonContext) async {
+          try {
+            await LogFileManager.instance
+                .shareCompressedLog(file, context: buttonContext);
+            if (context.mounted) {
+              Navigator.pop(context);
+              _showMessage('分享成功');
+            }
+          } catch (e) {
+            debugPrint('分享压缩文件失败: $e');
+            if (context.mounted) {
+              _showMessage('分享失败: $e');
+            }
+          }
+        },
       ),
     );
   }
@@ -408,6 +488,133 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
                       Theme.of(context).colorScheme.onErrorContainer,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 压缩文件对话框
+class _CompressedFilesDialog extends StatelessWidget {
+  final List<File> files;
+  final Future<void> Function(File file, BuildContext buttonContext) onShare;
+
+  const _CompressedFilesDialog({
+    required this.files,
+    required this.onShare,
+  });
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(2)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        width: double.maxFinite,
+        constraints: const BoxConstraints(maxHeight: 600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.folder_zip, size: 24),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      '压缩文件',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: files.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(
+                        child: Text('暂无压缩文件'),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: files.length,
+                      itemBuilder: (context, index) {
+                        final file = files[index];
+                        final fileName = file.path.split('/').last;
+
+                        return FutureBuilder<FileStat>(
+                          future: file.stat(),
+                          builder: (context, snapshot) {
+                            final stat = snapshot.data;
+                            final size = stat?.size ?? 0;
+                            final modified = stat?.modified;
+
+                            return ListTile(
+                              leading: const Icon(Icons.archive, size: 28),
+                              title: Text(
+                                fileName,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.storage,
+                                          size: 14, color: Colors.grey[600]),
+                                      const SizedBox(width: 4),
+                                      Text(_formatFileSize(size)),
+                                    ],
+                                  ),
+                                  if (modified != null)
+                                    Row(
+                                      children: [
+                                        Icon(Icons.access_time,
+                                            size: 14, color: Colors.grey[600]),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          DateFormat('yyyy-MM-dd HH:mm:ss')
+                                              .format(modified),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                              trailing: Builder(
+                                builder: (buttonContext) => IconButton(
+                                  icon: const Icon(Icons.share),
+                                  onPressed: () => onShare(file, buttonContext),
+                                  tooltip: '分享',
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
             ),
           ],
         ),

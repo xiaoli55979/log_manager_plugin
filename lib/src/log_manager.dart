@@ -40,6 +40,7 @@ class LogManager {
     }
 
     // 初始化文件管理器
+    // 注意：文件日志在 Debug 和 Release 模式下都会记录（如果 enableFileLog 为 true）
     if (_config.enableFileLog) {
       await LogFileManager.instance.init(
         logDirectory: _config.logDirectory,
@@ -51,12 +52,13 @@ class LogManager {
     // 设置上报器配置
     LogReporter.instance.setConfig(_config);
 
-    // 判断是否启用控制台输出
+    // 判断是否启用控制台输出（根据 Debug/Release 模式区分）
     final enableConsole = kDebugMode
         ? _config.enableConsoleInDebug
         : _config.enableConsoleInRelease;
 
     // 创建Logger实例
+    // 文件输出：在 Debug 和 Release 模式下都会记录（如果 enableFileLog 为 true）
     _logger = Logger(
       filter: ProductionFilter(),
       printer: SimpleLogPrinter(
@@ -155,8 +157,9 @@ class _CustomMultiOutput extends LogOutput {
     // 控制台输出
     if (enableConsole) {
       // 使用 debugPrint 输出，每行单独打印
+      // debugPrint 有长度限制（约1000字符），需要分段
       for (var line in event.lines) {
-        debugPrint(line);
+        _printLongString(line);
       }
     }
 
@@ -165,6 +168,21 @@ class _CustomMultiOutput extends LogOutput {
       final cleanLines = event.lines.map((line) => _removeAnsiCodes(line));
       final logText = cleanLines.join('\n');
       LogFileManager.instance.writeLog(logText);
+    }
+  }
+
+  /// 打印超长字符串，自动分段避免 debugPrint 截断
+  void _printLongString(String text) {
+    const int chunkSize = 800; // debugPrint 限制约1000，留点余量
+    if (text.length <= chunkSize) {
+      debugPrint(text);
+      return;
+    }
+
+    // 分段打印
+    for (int i = 0; i < text.length; i += chunkSize) {
+      final end = (i + chunkSize < text.length) ? i + chunkSize : text.length;
+      debugPrint(text.substring(i, end));
     }
   }
 

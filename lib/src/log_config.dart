@@ -12,6 +12,9 @@ class LogManagerConfig {
   final bool enableConsoleInRelease;
 
   /// 是否写入文件
+  ///
+  /// 默认为 true，在 Debug 和 Release 模式下都会记录日志文件
+  /// 如需只在 Debug 模式下记录，可设置为：enableFileLog: kDebugMode
   final bool enableFileLog;
 
   /// 单个日志文件最大大小（字节），默认10MB
