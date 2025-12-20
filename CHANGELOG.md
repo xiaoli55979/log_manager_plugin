@@ -10,6 +10,21 @@
 * **Improvement**: 日志内容查看页面标题颜色设置为黑色，提高可读性
 * **Dependency**: 添加`share_plus: ^11.0.0`依赖包
 
+## 1.0.4
+
+* **Performance Improvement**: Optimized file logging to prevent UI blocking
+  - Changed file writing from synchronous to asynchronous
+  - Removed forced buffer flushing for better performance
+  - File logging now defaults to Debug mode only (`enableFileLog = kDebugMode`)
+* Improved Dio interceptor log format for long content (auto line-wrapping with borders)
+* Updated documentation for performance considerations
+
+## 1.0.4
+
+* **Performance Improvement**: Changed default file logging to Debug mode only (`enableFileLog = kDebugMode`)
+* Improved app performance in Release mode by disabling file logging by default
+* Users can still enable file logging in Release mode by setting `enableFileLog: true`
+
 ## 1.0.3
 
 * **Breaking Change**: Renamed `LogUtil` to `LogManager` to avoid naming conflicts

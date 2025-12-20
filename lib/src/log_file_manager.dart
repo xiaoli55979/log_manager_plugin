@@ -96,30 +96,37 @@ class LogFileManager {
     _currentFileSize = 0;
   }
 
-  /// 写入日志到文件
-  Future<void> writeLog(String log) async {
+  /// 写入日志到文件（异步，不阻塞主线程）
+  void writeLog(String log) {
     if (_currentLogFile == null) return;
 
-    // 检查日期是否变化
-    final today = DateFormat('yyyyMMdd').format(DateTime.now());
-    if (today != _currentDate) {
-      await _initCurrentLogFile();
-      await _cleanOldLogFiles();
-    }
+    // 异步执行，不阻塞主线程
+    _writeLogAsync(log);
+  }
 
-    final logWithNewline = '$log\n';
-    final bytes = logWithNewline.length;
-
-    // 检查是否需要创建新文件
-    if (_currentFileSize + bytes > _maxFileSize) {
-      await _createNewLogFile();
-    }
-
+  /// 异步写入日志实现
+  Future<void> _writeLogAsync(String log) async {
     try {
+      // 检查日期是否变化
+      final today = DateFormat('yyyyMMdd').format(DateTime.now());
+      if (today != _currentDate) {
+        await _initCurrentLogFile();
+        await _cleanOldLogFiles();
+      }
+
+      final logWithNewline = '$log\n';
+      final bytes = logWithNewline.length;
+
+      // 检查是否需要创建新文件
+      if (_currentFileSize + bytes > _maxFileSize) {
+        await _createNewLogFile();
+      }
+
+      // 异步写入，不强制刷新缓冲区
       await _currentLogFile!.writeAsString(
         logWithNewline,
         mode: FileMode.append,
-        flush: true,
+        flush: false, // 不强制刷新，提高性能
       );
       _currentFileSize += bytes;
     } catch (e) {
@@ -128,7 +135,7 @@ class LogFileManager {
   }
 
   /// 获取今天的日志文件（支持新旧两种格式）
-  /// 
+  ///
   /// 注意：此方法现在主要用于兼容性，因为每次启动都会创建新文件
   // ignore: unused_element
   @Deprecated('每次启动都创建新文件，此方法不再使用')

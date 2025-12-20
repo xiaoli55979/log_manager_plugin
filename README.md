@@ -373,7 +373,7 @@ await LogReporter.instance.uploadLogs(
 | enabled | bool | true | 是否启用 |
 | enableConsoleInDebug | bool | true | Debug模式控制台输出 |
 | enableConsoleInRelease | bool | false | Release模式控制台输出 |
-| enableFileLog | bool | true | 文件日志 |
+| enableFileLog | bool | kDebugMode | 文件日志（默认只在Debug模式） |
 | maxFileSize | int | 10MB | 单文件最大大小 |
 | maxRetentionDays | int | 7 | 保留天数 |
 | logLevel | Level | debug | 日志级别 |

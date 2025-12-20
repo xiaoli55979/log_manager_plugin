@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
 /// 日志管理器配置
@@ -13,8 +14,8 @@ class LogManagerConfig {
 
   /// 是否写入文件
   ///
-  /// 默认为 true，在 Debug 和 Release 模式下都会记录日志文件
-  /// 如需只在 Debug 模式下记录，可设置为：enableFileLog: kDebugMode
+  /// 默认为 kDebugMode（只在 Debug 模式下写入文件，避免 Release 模式性能影响）
+  /// 如需在 Release 模式下也记录，可设置为：enableFileLog: true
   final bool enableFileLog;
 
   /// 单个日志文件最大大小（字节），默认10MB
@@ -41,7 +42,7 @@ class LogManagerConfig {
     this.enabled = true,
     this.enableConsoleInDebug = true,
     this.enableConsoleInRelease = false,
-    this.enableFileLog = true,
+    this.enableFileLog = kDebugMode,
     this.maxFileSize = 10 * 1024 * 1024, // 10MB
     this.maxRetentionDays = 7, // 保留7天
     this.logLevel = Level.debug,
