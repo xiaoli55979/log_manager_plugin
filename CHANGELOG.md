@@ -25,6 +25,12 @@
 * Improved app performance in Release mode by disabling file logging by default
 * Users can still enable file logging in Release mode by setting `enableFileLog: true`
 
+## 1.0.5
+
+* **Performance**: Changed default `enableFileLog` to `kDebugMode` (only write logs in Debug mode by default)
+* Improved performance in Release mode by disabling file logging by default
+* Users can still enable file logging in Release mode by setting `enableFileLog: true`
+
 ## 1.0.3
 
 * **Breaking Change**: Renamed `LogUtil` to `LogManager` to avoid naming conflicts
