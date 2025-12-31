@@ -42,11 +42,43 @@ class LogManager {
     // 初始化文件管理器
     // 注意：文件日志在 Debug 和 Release 模式下都会记录（如果 enableFileLog 为 true）
     if (_config.enableFileLog) {
-      await LogFileManager.instance.init(
-        logDirectory: _config.logDirectory,
-        maxFileSize: _config.maxFileSize,
-        maxRetentionDays: _config.maxRetentionDays,
-      );
+      try {
+        await LogFileManager.instance.init(
+          logDirectory: _config.logDirectory,
+          maxFileSize: _config.maxFileSize,
+          maxRetentionDays: _config.maxRetentionDays,
+        );
+        
+        // 验证初始化是否成功
+        final logDirPath = LogFileManager.instance.logDirectoryPath;
+        if (logDirPath == null) {
+          if (kDebugMode) {
+            debugPrint('警告: 日志文件管理器初始化后 logDirectoryPath 为 null');
+          }
+          // 即使路径为 null，也继续，因为可能是权限问题，但不应该阻止日志系统运行
+        } else {
+          // 验证目录是否存在且可写
+          final dir = Directory(logDirPath);
+          if (!await dir.exists()) {
+            if (kDebugMode) {
+              debugPrint('警告: 日志目录不存在: $logDirPath');
+            }
+          }
+        }
+      } catch (e, stackTrace) {
+        // 如果 enableFileLog 为 true，初始化失败应该抛出异常，让用户知道
+        // 但为了不影响应用启动，我们只记录错误，不抛出异常
+        if (kDebugMode) {
+          debugPrint('初始化日志文件管理器失败: $e');
+          debugPrint('堆栈: $stackTrace');
+        }
+        // 注意：即使初始化失败，_CustomMultiOutput 仍然会尝试写入
+        // writeLog 方法会处理 _currentLogFile 为 null 的情况
+      }
+    } else {
+      if (kDebugMode) {
+        debugPrint('文件日志已禁用 (enableFileLog: false)');
+      }
     }
 
     // 设置上报器配置

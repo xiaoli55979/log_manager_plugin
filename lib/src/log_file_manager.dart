@@ -29,21 +29,40 @@ class LogFileManager {
     _maxFileSize = maxFileSize;
     _maxRetentionDays = maxRetentionDays;
 
-    final directory = await getApplicationDocumentsDirectory();
-    _logDirectory = '${directory.path}/$logDirectory';
-
-    final dir = Directory(_logDirectory!);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-
-    await _initCurrentLogFile();
-
-    // 安全地清理旧文件，捕获所有异常
     try {
-      await _cleanOldLogFiles();
-    } catch (e) {
-      debugPrint('清理旧日志文件时出错（已忽略）: $e');
+      final directory = await getApplicationDocumentsDirectory();
+      _logDirectory = '${directory.path}/$logDirectory';
+
+      final dir = Directory(_logDirectory!);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      await _initCurrentLogFile();
+
+      // 验证文件是否创建成功
+      if (_currentLogFile == null) {
+        if (kDebugMode) {
+          debugPrint('警告: 日志文件初始化后 _currentLogFile 为 null');
+        }
+        // 尝试重新创建
+        await _createNewLogFile();
+      }
+
+      // 安全地清理旧文件，捕获所有异常
+      try {
+        await _cleanOldLogFiles();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('清理旧日志文件时出错（已忽略）: $e');
+        }
+      }
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('初始化日志文件管理器失败: $e');
+        debugPrint('堆栈: $stackTrace');
+      }
+      rethrow;
     }
   }
 
@@ -51,13 +70,41 @@ class LogFileManager {
   ///
   /// 每次应用启动时都会创建新的日志文件，避免单日日志过长
   Future<void> _initCurrentLogFile() async {
-    if (_logDirectory == null) return;
+    if (_logDirectory == null) {
+      if (kDebugMode) {
+        debugPrint('警告: _logDirectory 为 null，无法初始化日志文件');
+      }
+      return;
+    }
 
-    final today = DateFormat('yyyyMMdd').format(DateTime.now());
-    _currentDate = today;
+    try {
+      final today = DateFormat('yyyyMMdd').format(DateTime.now());
+      _currentDate = today;
 
-    // 每次启动都创建新文件，不检查现有文件
-    await _createNewLogFile();
+      // 每次启动都创建新文件，不检查现有文件
+      await _createNewLogFile();
+
+      // 验证文件是否创建成功
+      if (_currentLogFile == null) {
+        if (kDebugMode) {
+          debugPrint('警告: 创建日志文件后 _currentLogFile 仍为 null');
+        }
+        throw Exception('无法创建日志文件');
+      }
+
+      // 验证文件是否可写
+      if (!await _currentLogFile!.exists()) {
+        // 文件不存在，尝试创建
+        await _currentLogFile!.create(recursive: true);
+      }
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('初始化当前日志文件失败: $e');
+        debugPrint('堆栈: $stackTrace');
+      }
+      _currentLogFile = null;
+      rethrow;
+    }
   }
 
   /// 创建新的日志文件
@@ -97,11 +144,51 @@ class LogFileManager {
   }
 
   /// 写入日志到文件（异步，不阻塞主线程）
+  ///
+  /// 如果 enableFileLog 为 true，必须确保日志写入文件
   void writeLog(String log) {
-    if (_currentLogFile == null) return;
+    // 如果文件未初始化，尝试重新初始化
+    if (_currentLogFile == null) {
+      if (_logDirectory != null) {
+        // 尝试重新初始化文件
+        _initCurrentLogFile().then((_) {
+          // 初始化成功后，再次尝试写入
+          if (_currentLogFile != null) {
+            _writeLogAsync(log).catchError((error, stackTrace) {
+              if (kDebugMode) {
+                debugPrint('写入日志文件异步错误: $error');
+              }
+            });
+          }
+        }).catchError((error) {
+          if (kDebugMode) {
+            debugPrint('重新初始化日志文件失败: $error');
+          }
+        });
+      } else {
+        if (kDebugMode) {
+          debugPrint('写入日志文件失败: _logDirectory 为 null，日志文件管理器未初始化');
+        }
+      }
+      return;
+    }
 
     // 异步执行，不阻塞主线程
-    _writeLogAsync(log);
+    _writeLogAsync(log).catchError((error, stackTrace) {
+      // 捕获异步错误，尝试重新初始化后重试
+      if (kDebugMode) {
+        debugPrint('写入日志文件异步错误: $error');
+      }
+
+      // 如果写入失败，尝试重新初始化文件
+      if (_logDirectory != null) {
+        _initCurrentLogFile().catchError((e) {
+          if (kDebugMode) {
+            debugPrint('重新初始化日志文件失败: $e');
+          }
+        });
+      }
+    });
   }
 
   /// 异步写入日志实现
@@ -122,15 +209,51 @@ class LogFileManager {
         await _createNewLogFile();
       }
 
-      // 异步写入，不强制刷新缓冲区
+      // 检查文件是否仍然有效
+      if (_currentLogFile == null) {
+        // 尝试重新初始化
+        if (_logDirectory != null) {
+          await _initCurrentLogFile();
+          if (_currentLogFile == null) {
+            if (kDebugMode) {
+              debugPrint('写入日志文件失败: 重新初始化后 _currentLogFile 仍为 null');
+            }
+            return;
+          }
+        } else {
+          if (kDebugMode) {
+            debugPrint('写入日志文件失败: _logDirectory 为 null');
+          }
+          return;
+        }
+      }
+
+      // 在 release 模式下使用 flush: true 确保数据写入磁盘
+      // 在 debug 模式下使用 flush: false 提高性能
       await _currentLogFile!.writeAsString(
         logWithNewline,
         mode: FileMode.append,
-        flush: false, // 不强制刷新，提高性能
+        flush: kDebugMode ? false : true, // Release 模式强制刷新，确保写入
       );
       _currentFileSize += bytes;
-    } catch (e) {
-      debugPrint('写入日志文件失败: $e');
+    } catch (e, stackTrace) {
+      // 在 release 模式下也记录错误，但使用更安全的方式
+      if (kDebugMode) {
+        debugPrint('写入日志文件失败: $e');
+        debugPrint('堆栈: $stackTrace');
+      }
+
+      // 尝试重新初始化文件管理器
+      try {
+        if (_logDirectory != null && _currentLogFile == null) {
+          await _initCurrentLogFile();
+        }
+      } catch (e2) {
+        // 如果重新初始化也失败，静默处理
+        if (kDebugMode) {
+          debugPrint('重新初始化日志文件失败: $e2');
+        }
+      }
     }
   }
 
