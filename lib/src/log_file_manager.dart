@@ -15,6 +15,7 @@ class LogFileManager {
 
   String? _logDirectory;
   File? _currentLogFile;
+  IOSink? _writeSink; // 使用 IOSink 进行更可靠的文件写入
   int _currentFileSize = 0;
   int _maxFileSize = 10 * 1024 * 1024; // 10MB
   int _maxRetentionDays = 7; // 保留7天
@@ -66,6 +67,22 @@ class LogFileManager {
     }
   }
 
+  /// 关闭写入流
+  Future<void> _closeWriteSink() async {
+    if (_writeSink != null) {
+      try {
+        await _writeSink!.flush();
+        await _writeSink!.close();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('关闭写入流失败: $e');
+        }
+      } finally {
+        _writeSink = null;
+      }
+    }
+  }
+
   /// 初始化当前日志文件
   ///
   /// 每次应用启动时都会创建新的日志文件，避免单日日志过长
@@ -78,6 +95,9 @@ class LogFileManager {
     }
 
     try {
+      // 关闭旧的写入流
+      await _closeWriteSink();
+
       final today = DateFormat('yyyyMMdd').format(DateTime.now());
       _currentDate = today;
 
@@ -97,12 +117,23 @@ class LogFileManager {
         // 文件不存在，尝试创建
         await _currentLogFile!.create(recursive: true);
       }
+
+      // 打开写入流，使用追加模式
+      try {
+        _writeSink = _currentLogFile!.openWrite(mode: FileMode.append);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('打开日志文件写入流失败: $e');
+        }
+        _writeSink = null;
+      }
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('初始化当前日志文件失败: $e');
         debugPrint('堆栈: $stackTrace');
       }
       _currentLogFile = null;
+      _writeSink = null;
       rethrow;
     }
   }
@@ -141,12 +172,23 @@ class LogFileManager {
         '${timePrefix}_${fileIndex.toString().padLeft(3, '0')}.txt';
     _currentLogFile = File('$_logDirectory/$fileName');
     _currentFileSize = 0;
+
+    // 注意：写入流在 _initCurrentLogFile 中打开，这里不需要重复打开
   }
 
   /// 写入日志到文件（异步，不阻塞主线程）
   ///
   /// 如果 enableFileLog 为 true，必须确保日志写入文件
+  ///
+  /// 注意：只有在文件管理器被正确初始化后才会写入文件
+  /// 如果 enabled 为 false，文件管理器不会被初始化，此方法不会写入任何内容
   void writeLog(String log) {
+    // 如果文件管理器未初始化（enabled 为 false 时），直接返回
+    if (_logDirectory == null) {
+      // 文件管理器未初始化，不写入文件
+      return;
+    }
+
     // 如果文件未初始化，尝试重新初始化
     if (_currentLogFile == null) {
       if (_logDirectory != null) {
@@ -165,10 +207,6 @@ class LogFileManager {
             debugPrint('重新初始化日志文件失败: $error');
           }
         });
-      } else {
-        if (kDebugMode) {
-          debugPrint('写入日志文件失败: _logDirectory 为 null，日志文件管理器未初始化');
-        }
       }
       return;
     }
@@ -206,7 +244,10 @@ class LogFileManager {
 
       // 检查是否需要创建新文件
       if (_currentFileSize + bytes > _maxFileSize) {
+        await _closeWriteSink(); // 关闭旧文件的写入流
         await _createNewLogFile();
+        // 重新初始化文件（包括打开新的写入流）
+        await _initCurrentLogFile();
       }
 
       // 检查文件是否仍然有效
@@ -228,14 +269,50 @@ class LogFileManager {
         }
       }
 
-      // 在 release 模式下使用 flush: true 确保数据写入磁盘
-      // 在 debug 模式下使用 flush: false 提高性能
-      await _currentLogFile!.writeAsString(
-        logWithNewline,
-        mode: FileMode.append,
-        flush: kDebugMode ? false : true, // Release 模式强制刷新，确保写入
-      );
-      _currentFileSize += bytes;
+      // 使用 IOSink 进行写入，更可靠
+      if (_writeSink != null) {
+        try {
+          _writeSink!.write(logWithNewline);
+          // Release 模式立即刷新，确保数据写入磁盘
+          if (!kDebugMode) {
+            await _writeSink!.flush();
+          }
+          _currentFileSize += bytes;
+        } catch (e) {
+          // 如果写入失败，尝试重新打开文件
+          if (kDebugMode) {
+            debugPrint('使用 IOSink 写入失败，尝试重新打开文件: $e');
+          }
+          await _closeWriteSink();
+          try {
+            _writeSink = _currentLogFile!.openWrite(mode: FileMode.append);
+            _writeSink!.write(logWithNewline);
+            if (!kDebugMode) {
+              await _writeSink!.flush();
+            }
+            _currentFileSize += bytes;
+          } catch (e2) {
+            // 如果还是失败，回退到 writeAsString
+            if (kDebugMode) {
+              debugPrint('重新打开文件失败，使用 writeAsString: $e2');
+            }
+            await _currentLogFile!.writeAsString(
+              logWithNewline,
+              mode: FileMode.append,
+              flush: true, // 强制刷新
+            );
+            _currentFileSize += bytes;
+          }
+        }
+      } else {
+        // 如果没有写入流，使用 writeAsString（向后兼容）
+        await _currentLogFile!.writeAsString(
+          logWithNewline,
+          mode: FileMode.append,
+          flush: true, // 强制刷新，确保写入
+        );
+        _currentFileSize += bytes;
+      }
     } catch (e, stackTrace) {
       // 在 release 模式下也记录错误，但使用更安全的方式
       if (kDebugMode) {

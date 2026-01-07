@@ -1,6 +1,6 @@
 name: log_manager_plugin
 description: A comprehensive Flutter logging plugin with console output, file storage, log viewer UI, compression, and upload capabilities. Supports Dio interceptor and date-based log management.
-version: 1.0.6
+version: 1.0.8
 homepage: https://github.com/xiaoli55979/log_manager_plugin
 repository: https://github.com/xiaoli55979/log_manager_plugin
 issue_tracker: https://github.com/xiaoli55979/log_manager_plugin/issues

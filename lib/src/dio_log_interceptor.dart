@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'log_manager.dart';
 
@@ -57,7 +58,7 @@ class LogManagerInterceptor extends Interceptor {
 
   void _logRequest(RequestOptions options) {
     final buffer = StringBuffer();
-    buffer.write('\n${'=' * 35} START ${'=' * 35}\n');
+    buffer.write('\n${'=' * 15} START ${'=' * 15}\n');
     buffer.write(_addBorder('📤 REQUEST ${options.method} ${options.uri}'));
     buffer.write('\n');
 
@@ -78,13 +79,13 @@ class LogManagerInterceptor extends Interceptor {
       buffer.write('\n');
     }
 
-    buffer.write('${'=' * 36} END ${'=' * 36}\n');
+    buffer.write('${'=' * 16} END ${'=' * 16}\n');
     LogManager.d(buffer.toString());
   }
 
   void _logResponse(Response response) {
     final buffer = StringBuffer();
-    buffer.write('\n${'=' * 35} START ${'=' * 35}\n');
+    buffer.write('\n${'=' * 15} START ${'=' * 15}\n');
     buffer.write(_addBorder(
         '📥 RESPONSE ${response.statusCode} ${response.requestOptions.uri}'));
     buffer.write('\n');
@@ -106,13 +107,13 @@ class LogManagerInterceptor extends Interceptor {
       buffer.write('\n');
     }
 
-    buffer.write('${'=' * 36} END ${'=' * 36}\n');
+    buffer.write('${'=' * 16} END ${'=' * 16}\n');
     LogManager.i(buffer.toString());
   }
 
   void _logError(DioException err) {
     final buffer = StringBuffer();
-    buffer.write('\n${'=' * 35} START ${'=' * 35}\n');
+    buffer.write('\n${'=' * 15} START ${'=' * 15}\n');
     buffer.write(_addBorder('❌ ERROR ${err.type} ${err.requestOptions.uri}'));
     buffer.write('\n');
     buffer.write(_addBorder('Message: ${err.message}'));
@@ -130,16 +131,107 @@ class LogManagerInterceptor extends Interceptor {
       }
     }
 
-    buffer.write('${'=' * 36} END ${'=' * 36}\n');
+    buffer.write('${'=' * 16} END ${'=' * 16}\n');
     LogManager.e(buffer.toString(), error: err);
   }
 
   String _formatData(dynamic data) {
     if (data == null) return 'null';
-    if (data is Map || data is List) {
-      return data.toString();
+
+    // 先检查 toString 是否返回 "Instance of"，这通常意味着对象没有重写 toString
+    final str = data.toString();
+    if (str.contains('Instance of')) {
+      // 尝试获取对象的实际内容
+      try {
+        // 如果是 ResponseBody 类型，尝试获取其 data 属性
+        if (data.runtimeType.toString().contains('ResponseBody')) {
+          try {
+            // 尝试访问 data 属性
+            final dataValue = (data as dynamic).data;
+            if (dataValue != null && dataValue.toString() != str) {
+              return _formatData(dataValue); // 递归处理实际数据
+            }
+          } catch (e) {
+            // 忽略错误，继续尝试其他方法
+          }
+          
+          // 尝试访问 stream 或 bytes
+          try {
+            final stream = (data as dynamic).stream;
+            if (stream != null) {
+              return 'ResponseBody (流数据，无法直接显示)';
+            }
+          } catch (e) {
+            // 忽略错误
+          }
+          
+          try {
+            final bytes = (data as dynamic).bytes;
+            if (bytes != null && bytes is List<int>) {
+              // 尝试将字节转换为字符串
+              try {
+                final stringData = utf8.decode(bytes);
+                return _tryFormatAsJson(stringData);
+              } catch (e) {
+                return 'ResponseBody (二进制数据，${bytes.length} 字节)';
+              }
+            }
+          } catch (e) {
+            // 忽略错误
+          }
+          
+          return 'ResponseBody (无法解析内容)';
+        }
+        
+        // 对于其他 "Instance of" 类型，尝试 toJson 方法
+        try {
+          final jsonData = (data as dynamic).toJson();
+          if (jsonData != null) {
+            return _formatData(jsonData);
+          }
+        } catch (e) {
+          // 忽略错误
+        }
+        
+        // 如果都失败了，返回类型信息
+        return '${data.runtimeType} (无法格式化)';
+      } catch (e) {
+        return '${data.runtimeType} (处理失败: $e)';
+      }
     }
-    return data.toString();
+
+    // 如果是Map或List，尝试格式化为JSON
+    if (data is Map || data is List) {
+      try {
+        // 使用JsonEncoder美化JSON输出，缩进2个空格
+        const encoder = JsonEncoder.withIndent('  ');
+        return encoder.convert(data);
+      } catch (e) {
+        // 如果JSON编码失败，回退到toString
+        return str;
+      }
+    }
+
+    // 如果是字符串，尝试解析为JSON并美化
+    if (data is String) {
+      return _tryFormatAsJson(data);
+    }
+
+    return str;
+  }
+
+  /// 尝试将字符串格式化为JSON
+  String _tryFormatAsJson(String data) {
+    if (data.isEmpty) return data;
+    
+    try {
+      final decoded = jsonDecode(data);
+      const encoder = JsonEncoder.withIndent('  ');
+      return encoder.convert(decoded);
+    } catch (e) {
+      // 如果不是JSON字符串，直接返回
+      return data;
+    }
   }
 
   /// 给每一行添加左边框
@@ -148,22 +240,17 @@ class LogManagerInterceptor extends Interceptor {
   }
 
   /// 格式化并添加边框的 Body 内容（处理超长内容）
-  String _formatBody(String data, {int indent = 2}) {
-    final prefix = ' ' * indent;
+  String _formatBody(String data) {
     final lines = <String>[];
 
-    // 如果内容很长，按合理长度分行
-    const maxLineLength = 100;
-    if (data.length > maxLineLength) {
-      for (int i = 0; i < data.length; i += maxLineLength) {
-        final end =
-            (i + maxLineLength < data.length) ? i + maxLineLength : data.length;
-        lines.add('$prefix${data.substring(i, end)}');
-      }
-    } else {
-      lines.add('$prefix$data');
+    // 按行分割（JSON格式化后已经是多行的）
+    final dataLines = data.split('\n');
+
+    for (var line in dataLines) {
+      // 每行添加边框，保持原有的缩进
+      lines.add(_addBorder(line));
     }
 
-    return lines.map((line) => _addBorder(line)).join('\n');
+    return lines.join('\n');
   }
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.7
+
+* **Improvement**: 优化日志分隔线长度，缩短1/3避免换行问题
+  - START 和 END 分隔线从35/36个等号缩短到23/24个等号
+* **Improvement**: 改进API接口Body格式化显示
+  - JSON数据自动美化，带缩进显示
+  - 支持Map、List和JSON字符串的格式化
+* **Fix**: 修复日志输出被打断的问题
+  - 将整个日志块一次性输出，避免多线程环境下被其他日志打断
+  - 改进分段逻辑，尽量保持行的完整性
+* **Fix**: 修复ResponseBody类型显示为"Instance of 'ResponseBody'"的问题
+  - 自动检测并解析ResponseBody的实际内容
+  - 支持字节数组转换为UTF-8字符串
+  - 提供更友好的错误提示信息
+
 ## 1.0.6
 
 * **Fix**: 修复 Release 模式下日志文件未记录的问题

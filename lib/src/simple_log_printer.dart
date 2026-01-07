@@ -21,9 +21,6 @@ class SimpleLogPrinter extends LogPrinter {
 
     final lines = <String>[];
 
-    // 开始空行
-    lines.add('');
-
     // 时间和级别行
     final buffer = StringBuffer();
     if (printTime) {
@@ -51,9 +48,6 @@ class SimpleLogPrinter extends LogPrinter {
       lines.add('StackTrace:');
       lines.add(stackTraceStr);
     }
-
-    // 底部分隔线
-    lines.add('-' * lineLength);
 
     return lines;
   }

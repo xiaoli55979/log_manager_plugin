@@ -48,7 +48,7 @@ class LogManager {
           maxFileSize: _config.maxFileSize,
           maxRetentionDays: _config.maxRetentionDays,
         );
-        
+
         // 验证初始化是否成功
         final logDirPath = LogFileManager.instance.logDirectoryPath;
         if (logDirPath == null) {
@@ -188,11 +188,10 @@ class _CustomMultiOutput extends LogOutput {
   void output(OutputEvent event) {
     // 控制台输出
     if (enableConsole) {
-      // 使用 debugPrint 输出，每行单独打印
-      // debugPrint 有长度限制（约1000字符），需要分段
-      for (var line in event.lines) {
-        _printLongString(line);
-      }
+      // 将整个日志块合并为一个字符串，一次性输出
+      // 这样可以避免在多线程环境下被其他日志打断
+      final logText = event.lines.join('\n');
+      _printLongString(logText);
     }
 
     // 文件输出（去除颜色）
@@ -204,6 +203,7 @@ class _CustomMultiOutput extends LogOutput {
   }
 
   /// 打印超长字符串，自动分段避免 debugPrint 截断
+  /// 尽量按行分段，保持日志块的完整性
   void _printLongString(String text) {
     const int chunkSize = 800; // debugPrint 限制约1000，留点余量
     if (text.length <= chunkSize) {
@@ -211,10 +211,42 @@ class _CustomMultiOutput extends LogOutput {
       return;
     }
 
-    // 分段打印
-    for (int i = 0; i < text.length; i += chunkSize) {
-      final end = (i + chunkSize < text.length) ? i + chunkSize : text.length;
-      debugPrint(text.substring(i, end));
+    // 按行分割，尽量保持行的完整性
+    final lines = text.split('\n');
+    final buffer = StringBuffer();
+
+    for (var line in lines) {
+      // 如果当前缓冲区加上新行会超过限制，先输出缓冲区
+      if (buffer.length > 0 && buffer.length + line.length + 1 > chunkSize) {
+        debugPrint(buffer.toString());
+        buffer.clear();
+      }
+
+      // 如果单行就超过限制，需要进一步分段
+      if (line.length > chunkSize) {
+        // 先输出缓冲区
+        if (buffer.length > 0) {
+          debugPrint(buffer.toString());
+          buffer.clear();
+        }
+        // 分段输出超长行
+        for (int i = 0; i < line.length; i += chunkSize) {
+          final end =
+              (i + chunkSize < line.length) ? i + chunkSize : line.length;
+          debugPrint(line.substring(i, end));
+        }
+      } else {
+        // 添加到缓冲区
+        if (buffer.length > 0) {
+          buffer.write('\n');
+        }
+        buffer.write(line);
+      }
+    }
+
+    // 输出剩余的缓冲区内容
+    if (buffer.length > 0) {
+      debugPrint(buffer.toString());
     }
   }
 
