@@ -14,7 +14,7 @@ void main() async {
       enableFileLog: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxRetentionDays: 7, // 保留7天
-      logLevel: Level.debug,
+      // logLevel: Level.debug,
       logDirectory: 'logs',
     ),
   );
