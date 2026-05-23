@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'log_manager.dart';
 
@@ -43,9 +44,11 @@ class LogManagerInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
+  void onResponse(Response response, ResponseInterceptorHandler handler) async {
+    // ResponseBody 流式数据先 drain 再打印,同时用 fromBytes 重建塞回去,业务还能继续读
+    await _drainStreamIfNeeded(response);
     _logResponse(response);
-    super.onResponse(response, handler);
+    handler.next(response);
   }
 
   @override
@@ -61,6 +64,12 @@ class LogManagerInterceptor extends Interceptor {
     buffer.write('\n${'=' * 15} START ${'=' * 15}\n');
     buffer.write(_addBorder('📤 REQUEST ${options.method} ${options.uri}'));
     buffer.write('\n');
+    // encryption_handler 加密 path 时把明文存到了 extra,这里同步显示,定位接口用
+    final originalPath = options.extra['_originalPath'];
+    if (originalPath is String && originalPath.isNotEmpty) {
+      buffer.write(_addBorder('🔓 Original: $originalPath'));
+      buffer.write('\n');
+    }
 
     if (requestHeader && options.headers.isNotEmpty) {
       buffer.write(_addBorder('Headers:'));
@@ -74,7 +83,9 @@ class LogManagerInterceptor extends Interceptor {
     if (requestBody && options.data != null) {
       buffer.write(_addBorder('Body:'));
       buffer.write('\n');
-      final data = _formatData(options.data);
+      // walnut_cobalt_creek 把加密前的原始 Map 备份在 extra['__originalData']
+      final rawData = options.extra['__originalData'] ?? options.data;
+      final data = _formatData(rawData);
       buffer.write(_formatBody(data));
       buffer.write('\n');
     }
@@ -89,6 +100,11 @@ class LogManagerInterceptor extends Interceptor {
     buffer.write(_addBorder(
         '📥 RESPONSE ${response.statusCode} ${response.requestOptions.uri}'));
     buffer.write('\n');
+    final originalPath = response.requestOptions.extra['_originalPath'];
+    if (originalPath is String && originalPath.isNotEmpty) {
+      buffer.write(_addBorder('🔓 Original: $originalPath'));
+      buffer.write('\n');
+    }
 
     if (responseHeader && response.headers.map.isNotEmpty) {
       buffer.write(_addBorder('Headers:'));
@@ -102,7 +118,11 @@ class LogManagerInterceptor extends Interceptor {
     if (responseBody && response.data != null) {
       buffer.write(_addBorder('Body:'));
       buffer.write('\n');
-      final data = _formatData(response.data);
+      // drain 出来的字符串优先用,避免 ResponseBody.toString 还是 "Instance of"
+      final decoded = response.extra['__log_decoded_body'];
+      final data = decoded is String && decoded.isNotEmpty
+          ? _tryFormatAsJson(decoded)
+          : _formatData(response.data);
       buffer.write(_formatBody(data));
       buffer.write('\n');
     }
@@ -116,6 +136,11 @@ class LogManagerInterceptor extends Interceptor {
     buffer.write('\n${'=' * 15} START ${'=' * 15}\n');
     buffer.write(_addBorder('❌ ERROR ${err.type} ${err.requestOptions.uri}'));
     buffer.write('\n');
+    final originalPath = err.requestOptions.extra['_originalPath'];
+    if (originalPath is String && originalPath.isNotEmpty) {
+      buffer.write(_addBorder('🔓 Original: $originalPath'));
+      buffer.write('\n');
+    }
     buffer.write(_addBorder('Message: ${err.message}'));
     buffer.write('\n');
 
@@ -200,6 +225,14 @@ class LogManagerInterceptor extends Interceptor {
       }
     }
 
+    // 加密后的 body 是字节数组,按行打成几十行没意义,只留长度摘要
+    if (data is Uint8List) {
+      return '<binary ${data.length} bytes>';
+    }
+    if (data is List && data.isNotEmpty && data.every((e) => e is int)) {
+      return '<binary ${data.length} bytes>';
+    }
+
     // 如果是Map或List，尝试格式化为JSON
     if (data is Map || data is List) {
       try {
@@ -218,6 +251,43 @@ class LogManagerInterceptor extends Interceptor {
     }
 
     return str;
+  }
+
+  /// ResponseBody 流式响应在拦截器阶段还是 stream,直接 toString 看不到内容
+  /// 这里把 stream 收完转 bytes,然后用 fromBytes 重建 response.data,下游订阅照常拿到完整数据
+  ///
+  /// 注意:server-streaming(responseType=stream,如 flagd EventStream 长连接)不能 drain,
+  /// stream.toList() 会一直 hang 等 close,handler.next 永远不调用业务收不到任何消息
+  Future<void> _drainStreamIfNeeded(Response response) async {
+    final data = response.data;
+    if (data == null) return;
+    if (data.runtimeType.toString() != 'ResponseBody') return;
+    // 业务侧主动声明的 stream 响应直接放过,避免破坏长连接
+    if (response.requestOptions.responseType == ResponseType.stream) return;
+    try {
+      final stream = (data as dynamic).stream as Stream<List<int>>?;
+      if (stream == null) return;
+      final chunks = await stream.toList();
+      final bytes = <int>[];
+      for (final c in chunks) {
+        bytes.addAll(c);
+      }
+      response.data = ResponseBody.fromBytes(
+        bytes,
+        (data as dynamic).statusCode as int,
+        headers: ((data as dynamic).headers as Map<String, List<String>>?) ?? const {},
+        statusMessage: (data as dynamic).statusMessage as String?,
+        isRedirect: ((data as dynamic).isRedirect as bool?) ?? false,
+      );
+      // 在 response.extra 里塞一份解码后的字符串,_formatData 优先读它
+      try {
+        response.extra['__log_decoded_body'] = utf8.decode(bytes);
+      } catch (_) {
+        response.extra['__log_decoded_body'] = '<binary ${bytes.length} bytes>';
+      }
+    } catch (e) {
+      // drain 失败就放弃,日志走原路径
+    }
   }
 
   /// 尝试将字符串格式化为JSON
