@@ -208,12 +208,16 @@ class LogReportQueue {
     if (_buffer.isNotEmpty && !_disposed) _ensureTimer();
   }
 
-  /// 按数量+字节双阈值切出一批(至少 1 条)。
+  /// 取一批:只含队首 topic 的同 topic 条目(避免一批混多 topic 被 sink 用
+  /// batch.first.topic 误路由),再按数量+字节双阈值切。队首非空则至少 1 条。
   List<LogReportEntry> _takeBatch() {
     final batch = <LogReportEntry>[];
+    if (_buffer.isEmpty) return batch;
+    final topic = _buffer.first.topic;
     var bytes = 0;
     while (_buffer.isNotEmpty && batch.length < maxBatchCount) {
       final e = _buffer.first;
+      if (e.topic != topic) break; // 只取同 topic,不同 topic 留到下一批
       if (batch.isNotEmpty && bytes + e.approxBytes > maxBatchBytes) break;
       batch.add(e);
       bytes += e.approxBytes;
