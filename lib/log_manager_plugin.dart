@@ -1,8 +1,13 @@
-/// Log Manager Plugin Plugin
-///
-/// A comprehensive Flutter logging plugin with console output, file storage, log viewer UI, compression, and upload capabilities. Supports Dio interceptor and date-based log management.
+// Log Manager Plugin.
+//
+// A comprehensive Flutter logging plugin with console output, file storage,
+// log viewer UI, compression, and upload capabilities.
 
 // 核心类
+export 'src/app_log_im_source.dart';
+export 'src/app_log_viewer_config.dart';
+export 'src/app_log_viewer_page.dart';
+export 'src/app_log_viewer_runtime.dart';
 export 'src/dio_log_interceptor.dart';
 export 'src/enhanced_log_viewer.dart';
 export 'src/log_config.dart';
