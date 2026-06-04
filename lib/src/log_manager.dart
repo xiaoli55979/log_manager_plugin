@@ -4,6 +4,7 @@ import 'package:logger/logger.dart';
 import 'log_config.dart';
 import 'log_file_manager.dart';
 import 'log_reporter.dart';
+import 'reporting/log_report.dart';
 import 'simple_log_printer.dart';
 
 /// 日志工具类
@@ -169,6 +170,76 @@ class LogManager {
 
   /// 获取当前配置
   static LogManagerConfig get config => instance._config;
+
+  // ===== 以下为纯新增的公共上报接口(默认不启用,不影响以上任何现有方法) =====
+
+  /// full_logs 全量日志上报使用的 topic 常量。
+  static const String fullLogsTopic = 'full_logs';
+
+  static final LogReportQueue _reportQueue = LogReportQueue();
+  static bool _remoteFullLogEnabled = false;
+  static Level _remoteFullLogMinLevel = Level.warning;
+
+  /// full_logs 上报前的脱敏钩子(默认 null = 不脱敏)。开启 full_logs 应注入,
+  /// 对每行原始日志做 token/手机号/订单等敏感信息处理后再入队。
+  static String Function(String line)? _fullLogDesensitizer;
+
+  /// 注入上报实现(CLS 等后端由主项目实现并注入,插件零后端依赖)。
+  static void setReportSink(LogReportSink sink) {
+    _reportQueue.setSink(sink);
+  }
+
+  /// 统一结构化上报入口。sink 未注入时静默缓存待注入,不报错。
+  static void report(
+    String topic,
+    Map<String, String> fields, {
+    Level level = Level.info,
+  }) {
+    _reportQueue.enqueue(LogReportEntry(
+      topic: topic,
+      fields: Map<String, String>.of(fields),
+      level: level.value,
+      timeMs: DateTime.now().millisecondsSinceEpoch,
+    ));
+  }
+
+  /// full_logs 远程全量日志开关。开启后控制台/文件出口的全量日志(>= minLevel)
+  /// 经同一可靠队列上报。定向开启 + 自动过期 + 脱敏由调用方/后台约束。
+  static void enableRemoteFullLog({
+    required bool enabled,
+    Level minLevel = Level.warning,
+  }) {
+    _remoteFullLogEnabled = enabled;
+    _remoteFullLogMinLevel = minLevel;
+  }
+
+  /// 注入 full_logs 脱敏钩子。开启 full_logs 上报前应配置,逐行脱敏。
+  static void setFullLogDesensitizer(String Function(String line)? fn) {
+    _fullLogDesensitizer = fn;
+  }
+
+  /// full_logs 队列退出兜底:真 await 尽量发完积压。
+  static Future<void> flushReports() => _reportQueue.flush();
+
+  /// 供 _CustomMultiOutput 调用的全量日志 tap。未开启/未达阈值/无 sink 时静默丢弃。
+  static void _tapFullLog(OutputEvent event, List<String> cleanLines) {
+    if (!_remoteFullLogEnabled) return;
+    if (event.level < _remoteFullLogMinLevel) return;
+    final levelValue = event.level.value;
+    final timeMs = event.origin.time.millisecondsSinceEpoch;
+    final desensitize = _fullLogDesensitizer;
+    for (final raw in cleanLines) {
+      if (raw.isEmpty) continue;
+      final line = desensitize == null ? raw : desensitize(raw);
+      if (line.isEmpty) continue;
+      _reportQueue.enqueue(LogReportEntry(
+        topic: fullLogsTopic,
+        fields: {'line': line},
+        level: levelValue,
+        timeMs: timeMs,
+      ));
+    }
+  }
 }
 
 /// 自定义多输出类
@@ -199,6 +270,13 @@ class _CustomMultiOutput extends LogOutput {
       final cleanLines = event.lines.map((line) => _removeAnsiCodes(line));
       final logText = cleanLines.join('\n');
       LogFileManager.instance.writeLog(logText);
+    }
+
+    // full_logs 远程全量上报(纯新增第三分支,不影响以上 console/file 两个分支)
+    if (LogManager._remoteFullLogEnabled) {
+      final tapLines =
+          event.lines.map((line) => _removeAnsiCodes(line)).toList();
+      LogManager._tapFullLog(event, tapLines);
     }
   }
 
