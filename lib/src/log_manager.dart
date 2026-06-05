@@ -179,6 +179,8 @@ class LogManager {
   static final LogReportQueue _reportQueue = LogReportQueue();
   static bool _remoteFullLogEnabled = false;
   static Level _remoteFullLogMinLevel = Level.warning;
+  static bool _appLogViewerRemoteFullLogEnabled = false;
+  static Level _appLogViewerRemoteFullLogMinLevel = Level.debug;
 
   /// full_logs 上报前的脱敏钩子(默认 null = 不脱敏)。开启 full_logs 应注入,
   /// 对每行原始日志做 token/手机号/订单等敏感信息处理后再入队。
@@ -213,6 +215,16 @@ class LogManager {
     _remoteFullLogMinLevel = minLevel;
   }
 
+  /// APP 日志查看器远程全量日志开关。与 enableRemoteFullLog 独立计数,
+  /// 避免宿主旧开关和 viewer 远程配置互相覆盖。
+  static void enableAppLogViewerRemoteFullLog({
+    required bool enabled,
+    Level minLevel = Level.debug,
+  }) {
+    _appLogViewerRemoteFullLogEnabled = enabled;
+    _appLogViewerRemoteFullLogMinLevel = minLevel;
+  }
+
   /// 注入 full_logs 脱敏钩子。开启 full_logs 上报前应配置,逐行脱敏。
   static void setFullLogDesensitizer(String Function(String line)? fn) {
     _fullLogDesensitizer = fn;
@@ -221,23 +233,48 @@ class LogManager {
   /// full_logs 队列退出兜底:真 await 尽量发完积压。
   static Future<void> flushReports() => _reportQueue.flush();
 
+  /// 直接投递一行 full_logs。用于接入已有独立日志系统的 ring buffer,
+  /// 不额外写文件/控制台；远程开关未启用时静默跳过。
+  static void reportRemoteFullLogLine(
+    String line, {
+    Level level = Level.info,
+    DateTime? time,
+  }) {
+    if (!_isRemoteFullLogEnabled) return;
+    if (level < _effectiveRemoteFullLogMinLevel) return;
+    if (line.isEmpty) return;
+    final desensitize = _fullLogDesensitizer;
+    final safeLine = desensitize == null ? line : desensitize(line);
+    if (safeLine.isEmpty) return;
+    _reportQueue.enqueue(LogReportEntry(
+      topic: fullLogsTopic,
+      fields: {'line': safeLine},
+      level: level.value,
+      timeMs: (time ?? DateTime.now()).millisecondsSinceEpoch,
+    ));
+  }
+
+  static bool get _isRemoteFullLogEnabled =>
+      _remoteFullLogEnabled || _appLogViewerRemoteFullLogEnabled;
+
+  static Level get _effectiveRemoteFullLogMinLevel {
+    if (!_remoteFullLogEnabled) return _appLogViewerRemoteFullLogMinLevel;
+    if (!_appLogViewerRemoteFullLogEnabled) return _remoteFullLogMinLevel;
+    return _appLogViewerRemoteFullLogMinLevel.value <
+            _remoteFullLogMinLevel.value
+        ? _appLogViewerRemoteFullLogMinLevel
+        : _remoteFullLogMinLevel;
+  }
+
   /// 供 _CustomMultiOutput 调用的全量日志 tap。未开启/未达阈值/无 sink 时静默丢弃。
   static void _tapFullLog(OutputEvent event, List<String> cleanLines) {
-    if (!_remoteFullLogEnabled) return;
-    if (event.level < _remoteFullLogMinLevel) return;
-    final levelValue = event.level.value;
-    final timeMs = event.origin.time.millisecondsSinceEpoch;
-    final desensitize = _fullLogDesensitizer;
     for (final raw in cleanLines) {
       if (raw.isEmpty) continue;
-      final line = desensitize == null ? raw : desensitize(raw);
-      if (line.isEmpty) continue;
-      _reportQueue.enqueue(LogReportEntry(
-        topic: fullLogsTopic,
-        fields: {'line': line},
-        level: levelValue,
-        timeMs: timeMs,
-      ));
+      LogManager.reportRemoteFullLogLine(
+        raw,
+        level: event.level,
+        time: event.origin.time,
+      );
     }
   }
 }
@@ -273,7 +310,7 @@ class _CustomMultiOutput extends LogOutput {
     }
 
     // full_logs 远程全量上报(纯新增第三分支,不影响以上 console/file 两个分支)
-    if (LogManager._remoteFullLogEnabled) {
+    if (LogManager._isRemoteFullLogEnabled) {
       final tapLines =
           event.lines.map((line) => _removeAnsiCodes(line)).toList();
       LogManager._tapFullLog(event, tapLines);

@@ -8,6 +8,7 @@ class AppLogViewerConfig {
   final bool showIm;
   final bool showApi;
   final bool showFloating;
+  final bool autoUploadLogs;
   final bool printConsole;
   final List<String> usernames;
   final String title;
@@ -18,6 +19,7 @@ class AppLogViewerConfig {
     required this.showIm,
     required this.showApi,
     this.showFloating = false,
+    this.autoUploadLogs = false,
     this.printConsole = false,
     this.usernames = const [],
     this.title = 'APP日志',
@@ -29,6 +31,7 @@ class AppLogViewerConfig {
         showIm = false,
         showApi = false,
         showFloating = false,
+        autoUploadLogs = false,
         printConsole = false,
         usernames = const [],
         title = 'APP日志',
@@ -36,6 +39,7 @@ class AppLogViewerConfig {
 
   bool get isVisible => enabled && (showIm || showApi);
   bool get showFloatingEntry => isVisible && showFloating;
+  bool get shouldAutoUploadLogs => enabled && autoUploadLogs;
 
   bool isAllowedForUsername(String? username) {
     if (usernames.isEmpty) return true;
@@ -51,6 +55,7 @@ class AppLogViewerConfig {
       showIm: false,
       showApi: false,
       showFloating: false,
+      autoUploadLogs: false,
       printConsole: false,
       usernames: usernames,
       title: title,
@@ -90,6 +95,31 @@ class AppLogViewerConfig {
       'networkLog',
       'network_log',
     ]);
+    final autoUploadLogs = _readOptionalBool(raw, const [
+          'autoUpload',
+          'autoUploadLog',
+          'autoUploadLogs',
+          'auto_upload',
+          'auto_upload_log',
+          'auto_upload_logs',
+          'realtimeUpload',
+          'realTimeUpload',
+          'real_time_upload',
+          'upload',
+          'uploadLog',
+          'uploadLogs',
+          'upload_log',
+          'upload_logs',
+          'remoteUpload',
+          'remote_upload',
+          'remoteFullLog',
+          'remoteFullLogs',
+          'remote_full_log',
+          'remote_full_logs',
+          'fullLogs',
+          'full_logs',
+        ]) ??
+        false;
 
     final explicitEnabled = _readOptionalBool(raw, const [
       'enabled',
@@ -100,7 +130,10 @@ class AppLogViewerConfig {
       'show_entry',
     ]);
     final enabled = explicitEnabled ??
-        (imFlag == true || apiFlag == true || types.isNotEmpty);
+        (autoUploadLogs ||
+            imFlag == true ||
+            apiFlag == true ||
+            types.isNotEmpty);
 
     final hasTypes = types.isNotEmpty;
     final showIm = imFlag ?? (hasTypes ? types.contains('im') : enabled);
@@ -123,6 +156,7 @@ class AppLogViewerConfig {
             'quick_entry',
           ]) ??
           false,
+      autoUploadLogs: autoUploadLogs,
       printConsole: _readOptionalBool(raw, const [
             'console',
             'print',
