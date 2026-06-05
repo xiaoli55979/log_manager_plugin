@@ -255,8 +255,51 @@ class LogManager {
     Level level = Level.info,
     DateTime? time,
   }) {
-    if (!_isRemoteFullLogEnabled) return;
-    if (level < _effectiveRemoteFullLogMinLevel) return;
+    _reportFullLogLine(
+      line,
+      level: level,
+      time: time,
+      enabled: _isRemoteFullLogEnabled,
+      minLevel: _effectiveRemoteFullLogMinLevel,
+    );
+  }
+
+  /// 只跟 APP 日志查看器远程配置走的实时上报入口。
+  /// 用于全局异常等需要明确避开宿主旧 full_logs 开关的日志。
+  static void reportAppLogViewerFullLogLine(
+    String line, {
+    Level level = Level.info,
+    DateTime? time,
+  }) {
+    _reportFullLogLine(
+      line,
+      level: level,
+      time: time,
+      enabled: _appLogViewerRemoteFullLogEnabled,
+      minLevel: _appLogViewerRemoteFullLogMinLevel,
+    );
+  }
+
+  static void reportAppLogViewerErrorLine(
+    String line, {
+    DateTime? time,
+  }) {
+    reportAppLogViewerFullLogLine(
+      line,
+      level: Level.error,
+      time: time,
+    );
+  }
+
+  static void _reportFullLogLine(
+    String line, {
+    required Level level,
+    required DateTime? time,
+    required bool enabled,
+    required Level minLevel,
+  }) {
+    if (!enabled) return;
+    if (level < minLevel) return;
     if (line.isEmpty) return;
     final desensitize = _fullLogDesensitizer;
     final safeLine = desensitize == null ? line : desensitize(line);
