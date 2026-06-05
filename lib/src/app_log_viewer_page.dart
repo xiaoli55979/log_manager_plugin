@@ -186,7 +186,13 @@ class AppLogViewerPage extends StatelessWidget {
           foregroundColor: logViewerAppBarForeground,
           title: Text(config.title),
           actions: [_AppLogExportButton(config: config)],
-          bottom: TabBar(tabs: tabs.map((e) => Tab(text: e.title)).toList()),
+          bottom: TabBar(
+            labelColor: logViewerAppBarForeground,
+            unselectedLabelColor:
+                logViewerAppBarForeground?.withValues(alpha: 0.6),
+            indicatorColor: logViewerAppBarForeground,
+            tabs: tabs.map((e) => Tab(text: e.title)).toList(),
+          ),
         ),
         body: TabBarView(children: tabs.map((e) => e.child).toList()),
       ),
