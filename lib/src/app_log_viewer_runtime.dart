@@ -45,6 +45,7 @@ class AppLogViewerRuntime {
     String? username,
     Dio? dio,
   }) async {
+    LogManager.updateRemoteFullLogContext({'username': username});
     final next = configFromRemote(raw, username: username);
     await applyConfig(next, dio: dio);
     return next;

@@ -181,6 +181,7 @@ class LogManager {
   static Level _remoteFullLogMinLevel = Level.warning;
   static bool _appLogViewerRemoteFullLogEnabled = false;
   static Level _appLogViewerRemoteFullLogMinLevel = Level.debug;
+  static Map<String, String> _remoteFullLogContext = const {};
 
   /// full_logs 上报前的脱敏钩子(默认 null = 不脱敏)。开启 full_logs 应注入,
   /// 对每行原始日志做 token/手机号/订单等敏感信息处理后再入队。
@@ -189,6 +190,20 @@ class LogManager {
   /// 注入上报实现(CLS 等后端由主项目实现并注入,插件零后端依赖)。
   static void setReportSink(LogReportSink sink) {
     _reportQueue.setSink(sink);
+  }
+
+  /// 设置 full_logs 每条实时上报都会携带的公共字段。
+  /// 典型字段: username/accountNo/deviceId/packageName/ip 等。
+  static void setRemoteFullLogContext(Map<String, String?> context) {
+    _remoteFullLogContext = Map<String, String>.unmodifiable(
+      _cleanReportFields(context),
+    );
+  }
+
+  /// 增量更新 full_logs 公共字段。传空字符串/null 会移除对应字段。
+  static void updateRemoteFullLogContext(Map<String, String?> context) {
+    final merged = <String, String?>{..._remoteFullLogContext, ...context};
+    setRemoteFullLogContext(merged);
   }
 
   /// 统一结构化上报入口。sink 未注入时静默缓存待注入,不报错。
@@ -248,10 +263,31 @@ class LogManager {
     if (safeLine.isEmpty) return;
     _reportQueue.enqueue(LogReportEntry(
       topic: fullLogsTopic,
-      fields: {'line': safeLine},
+      fields: {
+        ..._remoteFullLogContext,
+        'line': safeLine,
+      },
       level: level.value,
       timeMs: (time ?? DateTime.now()).millisecondsSinceEpoch,
     ));
+  }
+
+  static Map<String, String> _cleanReportFields(
+    Map<String, String?> fields,
+  ) {
+    final cleaned = <String, String>{};
+    fields.forEach((key, value) {
+      final normalizedKey = key.trim();
+      final normalizedValue = value?.trim();
+      if (normalizedKey.isEmpty ||
+          normalizedKey == 'line' ||
+          normalizedValue == null ||
+          normalizedValue.isEmpty) {
+        return;
+      }
+      cleaned[normalizedKey] = normalizedValue;
+    });
+    return cleaned;
   }
 
   static bool get _isRemoteFullLogEnabled =>
