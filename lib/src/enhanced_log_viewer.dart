@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'log_file_manager.dart';
 import 'log_manager.dart';
+import 'log_viewer_share.dart';
+import 'log_viewer_theme.dart';
 
 /// 增强版日志查看器
 class EnhancedLogViewer extends StatefulWidget {
@@ -47,36 +47,8 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
       _showMessage('请先选择要压缩的日志文件');
       return;
     }
-
-    try {
-      final selectedFiles = _selectedIndices.map((i) => _logFiles[i]).toList();
-      final zipFile =
-          await LogFileManager.instance.compressSpecificLogs(selectedFiles);
-
-      if (zipFile != null) {
-        if (mounted) {
-          final size = await zipFile.length();
-          _showMessage(
-              '压缩成功！\n文件: ${zipFile.path.split('/').last}\n大小: ${_formatFileSize(size)}');
-
-          // 延迟一下确保文件完全创建，然后弹出系统分享
-          await Future.delayed(const Duration(milliseconds: 300));
-          if (mounted) {
-            try {
-              await LogFileManager.instance
-                  .shareCompressedLog(zipFile, context: context);
-            } catch (e) {
-              debugPrint('分享失败: $e');
-              _showMessage('分享失败: $e');
-            }
-          }
-        }
-      } else {
-        _showMessage('压缩失败');
-      }
-    } catch (e) {
-      _showMessage('压缩失败: $e');
-    }
+    final selectedFiles = _selectedIndices.map((i) => _logFiles[i]).toList();
+    await compressAndShareLogs(context, selectedFiles);
   }
 
   Future<void> _compressAllLogs() async {
@@ -84,33 +56,7 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
       _showMessage('没有日志文件可压缩');
       return;
     }
-
-    try {
-      final zipFile = await LogManager.compressLogs();
-      if (zipFile != null) {
-        if (mounted) {
-          final size = await zipFile.length();
-          _showMessage(
-              '压缩成功！\n文件: ${zipFile.path.split('/').last}\n大小: ${_formatFileSize(size)}');
-
-          // 延迟一下确保文件完全创建，然后弹出系统分享
-          await Future.delayed(const Duration(milliseconds: 300));
-          if (mounted) {
-            try {
-              await LogFileManager.instance
-                  .shareCompressedLog(zipFile, context: context);
-            } catch (e) {
-              debugPrint('分享失败: $e');
-              _showMessage('分享失败: $e');
-            }
-          }
-        }
-      } else {
-        _showMessage('压缩失败');
-      }
-    } catch (e) {
-      _showMessage('压缩失败: $e');
-    }
+    await compressAndShareLogs(context, _logFiles);
   }
 
   Future<void> _deleteSelectedLogs() async {
@@ -212,6 +158,8 @@ class _EnhancedLogViewerState extends State<EnhancedLogViewer> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: logViewerAppBarBackground,
+        foregroundColor: logViewerAppBarForeground,
         title: const Text('日志文件管理'),
         actions: [
           if (_logFiles.isNotEmpty)
@@ -632,10 +580,9 @@ class _EnhancedLogContentViewerState extends State<EnhancedLogContentViewer> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          fileName,
-          style: const TextStyle(color: Colors.black),
-        ),
+        backgroundColor: logViewerAppBarBackground,
+        foregroundColor: logViewerAppBarForeground,
+        title: Text(fileName),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -491,31 +493,62 @@ class LogFileManager {
     }
   }
 
-  /// 压缩指定的日志文件
-  Future<File?> compressSpecificLogs(List<File> files) async {
+  /// 压缩指定的日志文件，在后台 isolate 逐个文件流式压缩，避免大量日志阻塞 UI
+  /// [onProgress] 回报已压缩文件数 done 与总数 total
+  Future<File?> compressSpecificLogs(
+    List<File> files, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    if (files.isEmpty || _logDirectory == null) return null;
+
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final zipPath = '$_logDirectory/logs_$timestamp.zip';
+    final paths = files.map((f) => f.path).toList();
+    final total = paths.length;
+
+    final receivePort = ReceivePort();
+    final completer = Completer<File?>();
+
+    void finish(File? result) {
+      if (!completer.isCompleted) completer.complete(result);
+      receivePort.close();
+    }
+
+    onProgress?.call(0, total);
+
     try {
-      if (files.isEmpty) return null;
-
-      final archive = Archive();
-
-      for (final file in files) {
-        final fileName = file.path.split('/').last;
-        final fileBytes = await file.readAsBytes();
-        archive.addFile(ArchiveFile(fileName, fileBytes.length, fileBytes));
-      }
-
-      final zipEncoder = ZipEncoder();
-      final zipData = zipEncoder.encode(archive);
-
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final zipFile = File('$_logDirectory/logs_$timestamp.zip');
-      await zipFile.writeAsBytes(zipData);
-
-      return zipFile;
+      await Isolate.spawn(
+        _runZipInIsolate,
+        _ZipTask(receivePort.sendPort, paths, zipPath),
+        onExit: receivePort.sendPort,
+      );
     } catch (e) {
       debugPrint('压缩指定日志文件失败: $e');
-      return null;
+      finish(null);
+      return completer.future;
     }
+
+    receivePort.listen((message) {
+      if (message is List && message.isNotEmpty) {
+        switch (message[0]) {
+          case 'progress':
+            onProgress?.call(message[1] as int, total);
+            break;
+          case 'done':
+            finish(File(message[1] as String));
+            break;
+          case 'error':
+            debugPrint('压缩指定日志文件失败: ${message[1]}');
+            finish(null);
+            break;
+        }
+      } else if (message == null) {
+        // isolate 退出兜底：未正常完成则按失败处理
+        finish(null);
+      }
+    });
+
+    return completer.future;
   }
 
   /// 压缩指定日期的日志文件
@@ -775,5 +808,32 @@ class LogStatistics {
       return '${(totalSize / 1024).toStringAsFixed(2)} KB';
     }
     return '${(totalSize / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+}
+
+/// 后台压缩任务参数
+class _ZipTask {
+  final SendPort sendPort;
+  final List<String> filePaths;
+  final String zipPath;
+  _ZipTask(this.sendPort, this.filePaths, this.zipPath);
+}
+
+/// 在后台 isolate 逐个文件流式压缩，每完成一个文件回报进度
+void _runZipInIsolate(_ZipTask task) {
+  try {
+    final encoder = ZipFileEncoder();
+    encoder.create(task.zipPath);
+    for (var i = 0; i < task.filePaths.length; i++) {
+      final file = File(task.filePaths[i]);
+      if (file.existsSync()) {
+        encoder.addFileSync(file);
+      }
+      task.sendPort.send(['progress', i + 1]);
+    }
+    encoder.closeSync();
+    task.sendPort.send(['done', task.zipPath]);
+  } catch (e) {
+    task.sendPort.send(['error', e.toString()]);
   }
 }

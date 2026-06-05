@@ -19,4 +19,6 @@ export 'src/log_reporter.dart';
 export 'src/reporting/log_report.dart';
 export 'src/log_viewer_by_date.dart';
 export 'src/log_viewer_page.dart';
+export 'src/log_viewer_share.dart';
+export 'src/log_viewer_theme.dart';
 export 'src/simple_log_printer.dart';

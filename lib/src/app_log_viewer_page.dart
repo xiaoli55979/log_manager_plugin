@@ -12,6 +12,7 @@ import 'app_log_im_source.dart';
 import 'app_log_viewer_config.dart';
 import 'app_log_viewer_runtime.dart';
 import 'log_manager.dart';
+import 'log_viewer_theme.dart';
 
 typedef AppLogViewerOpenCallback = void Function(
   BuildContext context,
@@ -156,7 +157,11 @@ class AppLogViewerPage extends StatelessWidget {
 
     if (tabs.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(config.title)),
+        appBar: AppBar(
+          backgroundColor: logViewerAppBarBackground,
+          foregroundColor: logViewerAppBarForeground,
+          title: Text(config.title),
+        ),
         body: const Center(child: Text('日志入口未开启')),
       );
     }
@@ -164,6 +169,8 @@ class AppLogViewerPage extends StatelessWidget {
     if (tabs.length == 1) {
       return Scaffold(
         appBar: AppBar(
+          backgroundColor: logViewerAppBarBackground,
+          foregroundColor: logViewerAppBarForeground,
           title: Text('${config.title}-${tabs.first.title}'),
           actions: [_AppLogExportButton(config: config)],
         ),
@@ -175,6 +182,8 @@ class AppLogViewerPage extends StatelessWidget {
       length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: logViewerAppBarBackground,
+          foregroundColor: logViewerAppBarForeground,
           title: Text(config.title),
           actions: [_AppLogExportButton(config: config)],
           bottom: TabBar(tabs: tabs.map((e) => Tab(text: e.title)).toList()),

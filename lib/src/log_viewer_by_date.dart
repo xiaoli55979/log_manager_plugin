@@ -1,9 +1,10 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'log_file_manager.dart';
 import 'enhanced_log_viewer.dart';
+import 'log_viewer_share.dart';
+import 'log_viewer_theme.dart';
 
 /// 按日期查看日志
 class LogViewerByDate extends StatefulWidget {
@@ -49,39 +50,11 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
       return;
     }
 
-    try {
-      final List<File> filesToCompress = [];
-      for (final date in _selectedDates) {
-        filesToCompress.addAll(_logsByDate[date] ?? []);
-      }
-
-      final zipFile =
-          await LogFileManager.instance.compressSpecificLogs(filesToCompress);
-
-      if (zipFile != null) {
-        if (mounted) {
-          final size = await zipFile.length();
-          _showMessage(
-              '压缩成功！\n文件: ${zipFile.path.split('/').last}\n大小: ${_formatFileSize(size)}');
-
-          // 延迟一下确保文件完全创建，然后弹出系统分享
-          await Future.delayed(const Duration(milliseconds: 300));
-          if (mounted) {
-            try {
-              await LogFileManager.instance
-                  .shareCompressedLog(zipFile, context: context);
-            } catch (e) {
-              debugPrint('分享失败: $e');
-              _showMessage('分享失败: $e');
-            }
-          }
-        }
-      } else {
-        _showMessage('压缩失败');
-      }
-    } catch (e) {
-      _showMessage('压缩失败: $e');
+    final List<File> filesToCompress = [];
+    for (final date in _selectedDates) {
+      filesToCompress.addAll(_logsByDate[date] ?? []);
     }
+    await compressAndShareLogs(context, filesToCompress);
   }
 
   Future<void> _deleteSelectedDates() async {
@@ -189,6 +162,8 @@ class _LogViewerByDateState extends State<LogViewerByDate> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: logViewerAppBarBackground,
+        foregroundColor: logViewerAppBarForeground,
         title: const Text('按日期查看日志'),
         actions: [
           IconButton(
