@@ -154,6 +154,14 @@ class AppLogViewerPage extends StatelessWidget {
         ),
       );
     }
+    if (config.showLine) {
+      tabs.add(
+        _AppLogTab(
+          title: '线路',
+          child: _LineLogPanel(maxEntries: config.maxEntries),
+        ),
+      );
+    }
 
     if (tabs.isEmpty) {
       return Scaffold(
@@ -576,6 +584,143 @@ class _ApiLogPanelState extends State<_ApiLogPanel> {
   }
 }
 
+class _LineLogPanel extends StatefulWidget {
+  final int maxEntries;
+
+  const _LineLogPanel({required this.maxEntries});
+
+  @override
+  State<_LineLogPanel> createState() => _LineLogPanelState();
+}
+
+class _LineLogPanelState extends State<_LineLogPanel> {
+  final TextEditingController _searchController = TextEditingController();
+  List<_ApiLogBlock> _blocks = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final blocks = await _loadLineLogBlocks(widget.maxEntries);
+
+      if (!mounted) return;
+      setState(() {
+        _blocks = blocks;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _blocks = [];
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载线路日志失败: $e')),
+      );
+    }
+  }
+
+  List<_ApiLogBlock> get _filtered {
+    final keyword = _searchController.text.trim().toLowerCase();
+    if (keyword.isEmpty) return _blocks;
+    return _blocks
+        .where((block) => block.content.toLowerCase().contains(keyword))
+        .toList();
+  }
+
+  Future<void> _copy() async {
+    final text = _filtered.map((e) => e.content).join('\n\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已复制线路日志'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _clear() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清空日志'),
+        content: const Text('确定要清空本地 APP 日志吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await LogManager.clearAllLogs();
+    await AppLogViewerRuntime.restoreAfterClear();
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = _filtered;
+    return Column(
+      children: [
+        _LogToolbar(
+          hintText: '搜索线路日志',
+          controller: _searchController,
+          onChanged: (_) => setState(() {}),
+          actions: [
+            IconButton(
+              tooltip: '刷新',
+              icon: const Icon(Icons.refresh),
+              onPressed: _load,
+            ),
+            IconButton(
+              tooltip: '复制',
+              icon: const Icon(Icons.copy),
+              onPressed: _copy,
+            ),
+            IconButton(
+              tooltip: '清空',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _clear,
+            ),
+          ],
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : blocks.isEmpty
+                  ? const _EmptyLogView(text: '暂无线路日志')
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      itemCount: blocks.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, index) =>
+                          _ApiLogTile(block: blocks[index]),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
 class _LogToolbar extends StatelessWidget {
   final String hintText;
   final TextEditingController controller;
@@ -846,6 +991,25 @@ Future<File?> _buildExportFile(AppLogViewerConfig config) async {
     }
   }
 
+  if (config.showLine) {
+    final blocks = await _loadLineLogBlocks(config.maxEntries);
+    _writeSection(buffer, '线路日志');
+    if (blocks.isEmpty) {
+      buffer.writeln('暂无线路日志');
+    } else {
+      hasContent = true;
+      for (final block in blocks) {
+        buffer
+          ..writeln(
+            '${DateFormat('MM-dd HH:mm:ss').format(block.modified)}  '
+            '${block.fileName}',
+          )
+          ..writeln(block.content)
+          ..writeln();
+      }
+    }
+  }
+
   if (!hasContent) return null;
   final dir = await getTemporaryDirectory();
   final file = File('${dir.path}/app_log_${_fileTimestamp()}.txt');
@@ -857,6 +1021,7 @@ List<String> _enabledLogTypes(AppLogViewerConfig config) {
   final types = <String>[];
   if (config.showIm) types.add('IM');
   if (config.showApi) types.add('API');
+  if (config.showLine) types.add('线路');
   return types.isEmpty ? ['未开启'] : types;
 }
 
@@ -882,6 +1047,29 @@ Future<List<_ApiLogBlock>> _loadApiLogBlocks(int maxEntries) async {
     final bytes = await item.file.readAsBytes();
     final content = utf8.decode(bytes, allowMalformed: true);
     final extracted = _extractApiBlocks(
+      content,
+      fileName: item.file.path.split('/').last,
+      modified: item.stat.modified,
+    );
+    blocks.addAll(extracted.take(maxEntries - blocks.length));
+  }
+  return blocks;
+}
+
+Future<List<_ApiLogBlock>> _loadLineLogBlocks(int maxEntries) async {
+  final files = await LogManager.getAllLogFiles();
+  final fileStats = <_ApiLogFile>[];
+  for (final file in files) {
+    fileStats.add(_ApiLogFile(file: file, stat: await file.stat()));
+  }
+  fileStats.sort((a, b) => b.stat.modified.compareTo(a.stat.modified));
+
+  final blocks = <_ApiLogBlock>[];
+  for (final item in fileStats) {
+    if (blocks.length >= maxEntries) break;
+    final bytes = await item.file.readAsBytes();
+    final content = utf8.decode(bytes, allowMalformed: true);
+    final extracted = _extractLineBlocks(
       content,
       fileName: item.file.path.split('/').last,
       modified: item.stat.modified,
@@ -937,12 +1125,65 @@ List<_ApiLogBlock> _extractApiBlocks(
       .toList();
 }
 
+List<_ApiLogBlock> _extractLineBlocks(
+  String content, {
+  required String fileName,
+  required DateTime modified,
+}) {
+  final lines = content.split('\n');
+  final blocks = <_ApiLogBlock>[];
+
+  for (var i = lines.length - 1; i >= 0; i--) {
+    final line = lines[i];
+    if (!_isLineBlock(line)) continue;
+    final blockLines = <String>[];
+    if (i > 0 && _isLogHeaderLine(lines[i - 1])) {
+      blockLines.add(lines[i - 1]);
+    }
+    blockLines.add(line);
+    var nextIndex = i + 1;
+    while (
+        nextIndex < lines.length && _isLineContinuationLine(lines[nextIndex])) {
+      blockLines.add(lines[nextIndex]);
+      nextIndex++;
+    }
+    final text = _maskSensitive(blockLines.join('\n').trim());
+    if (text.isEmpty) continue;
+    blocks.add(
+      _ApiLogBlock(
+        title: _resolveLineTitle(text),
+        content: text,
+        fileName: fileName,
+        modified: modified,
+      ),
+    );
+  }
+
+  return blocks;
+}
+
 bool _isApiBlock(String text) {
   return text.contains('REQUEST ') ||
       text.contains('RESPONSE ') ||
       text.contains('ERROR DioExceptionType') ||
       text.contains('Original:') ||
       text.contains('[NETWORK]');
+}
+
+bool _isLineBlock(String text) {
+  return text.contains('[LINE]') ||
+      text.contains('[HTTPDNS]') ||
+      text.contains('[network_line_manager]');
+}
+
+bool _isLogHeaderLine(String text) {
+  return RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \[[A-Z]+\]')
+      .hasMatch(text.trim());
+}
+
+bool _isLineContinuationLine(String text) {
+  final trimmed = text.trimLeft();
+  return trimmed.startsWith('Error:') || trimmed.startsWith('StackTrace:');
 }
 
 String _resolveApiTitle(String text) {
@@ -955,6 +1196,15 @@ String _resolveApiTitle(String text) {
     }
   }
   return 'API 日志';
+}
+
+String _resolveLineTitle(String text) {
+  for (final line in text.split('\n')) {
+    if (_isLineBlock(line)) {
+      return line.trim();
+    }
+  }
+  return '线路日志';
 }
 
 void _writeSection(StringBuffer buffer, String title) {

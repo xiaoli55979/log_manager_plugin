@@ -124,6 +124,11 @@ class AppLogViewerRuntime {
     return _debugBuildLogEnabled || cfg.showApi;
   }
 
+  static bool shouldRecordLineLogs([AppLogViewerConfig? next]) {
+    final cfg = next ?? _configNotifier.value;
+    return _debugBuildLogEnabled || cfg.showLine || cfg.shouldAutoUploadLogs;
+  }
+
   static void configureDio(
     Dio dio, [
     AppLogViewerConfig? next,

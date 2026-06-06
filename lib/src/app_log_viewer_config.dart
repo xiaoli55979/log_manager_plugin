@@ -7,6 +7,7 @@ class AppLogViewerConfig {
   final bool enabled;
   final bool showIm;
   final bool showApi;
+  final bool showLine;
   final bool showFloating;
   final bool autoUploadLogs;
   final bool printConsole;
@@ -18,6 +19,7 @@ class AppLogViewerConfig {
     required this.enabled,
     required this.showIm,
     required this.showApi,
+    this.showLine = false,
     this.showFloating = false,
     this.autoUploadLogs = false,
     this.printConsole = false,
@@ -30,6 +32,7 @@ class AppLogViewerConfig {
       : enabled = false,
         showIm = false,
         showApi = false,
+        showLine = false,
         showFloating = false,
         autoUploadLogs = false,
         printConsole = false,
@@ -37,7 +40,7 @@ class AppLogViewerConfig {
         title = 'APP日志',
         maxEntries = 300;
 
-  bool get isVisible => enabled && (showIm || showApi);
+  bool get isVisible => enabled && (showIm || showApi || showLine);
   bool get showFloatingEntry => isVisible && showFloating;
   bool get shouldAutoUploadLogs => enabled && autoUploadLogs;
 
@@ -54,6 +57,7 @@ class AppLogViewerConfig {
       enabled: false,
       showIm: false,
       showApi: false,
+      showLine: false,
       showFloating: false,
       autoUploadLogs: false,
       printConsole: false,
@@ -67,6 +71,7 @@ class AppLogViewerConfig {
     final labels = <String>[];
     if (showIm) labels.add('IM');
     if (showApi) labels.add('API');
+    if (showLine) labels.add('线路');
     return labels.join('/');
   }
 
@@ -94,6 +99,20 @@ class AppLogViewerConfig {
       'network',
       'networkLog',
       'network_log',
+    ]);
+    final lineFlag = _readOptionalBool(raw, const [
+      'line',
+      'showLine',
+      'show_line',
+      'lineLog',
+      'line_log',
+      'networkLine',
+      'network_line',
+      'networkLineLog',
+      'network_line_log',
+      'httpdns',
+      'httpDns',
+      'http_dns',
     ]);
     final autoUploadLogs = _readOptionalBool(raw, const [
           'autoUpload',
@@ -133,16 +152,25 @@ class AppLogViewerConfig {
         (autoUploadLogs ||
             imFlag == true ||
             apiFlag == true ||
+            lineFlag == true ||
             types.isNotEmpty);
 
     final hasTypes = types.isNotEmpty;
-    final showIm = imFlag ?? (hasTypes ? types.contains('im') : enabled);
-    final showApi = apiFlag ?? (hasTypes ? types.contains('api') : enabled);
+    final hasExplicitTypeFlags =
+        imFlag != null || apiFlag != null || lineFlag != null;
+    final defaultShowAll = !hasTypes && !hasExplicitTypeFlags;
+    final showIm =
+        imFlag ?? (hasTypes ? types.contains('im') : defaultShowAll && enabled);
+    final showApi = apiFlag ??
+        (hasTypes ? types.contains('api') : defaultShowAll && enabled);
+    final showLine = lineFlag ??
+        (hasTypes ? types.contains('line') : defaultShowAll && enabled);
 
     return AppLogViewerConfig(
       enabled: enabled,
       showIm: showIm,
       showApi: showApi,
+      showLine: showLine,
       showFloating: _readOptionalBool(raw, const [
             'floating',
             'float',
@@ -217,7 +245,17 @@ class AppLogViewerConfig {
 
     return values
         .map((e) => e.toString().trim().toLowerCase())
-        .where((e) => e == 'im' || e == 'api')
+        .map((e) {
+          if (e == 'networkline' ||
+              e == 'network_line' ||
+              e == 'line_log' ||
+              e == 'httpdns' ||
+              e == 'http_dns') {
+            return 'line';
+          }
+          return e;
+        })
+        .where((e) => e == 'im' || e == 'api' || e == 'line')
         .toSet();
   }
 
