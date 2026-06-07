@@ -336,40 +336,6 @@ class LogFileManager {
     }
   }
 
-  /// 获取今天的日志文件（支持新旧两种格式）
-  ///
-  /// 注意：此方法现在主要用于兼容性，因为每次启动都会创建新文件
-  // ignore: unused_element
-  @Deprecated('每次启动都创建新文件，此方法不再使用')
-  Future<List<File>> _getTodayLogFiles() async {
-    if (_logDirectory == null) return [];
-
-    final today = DateFormat('yyyyMMdd').format(DateTime.now());
-    final dir = Directory(_logDirectory!);
-    if (!await dir.exists()) return [];
-
-    final files = await dir
-        .list()
-        .where((entity) {
-          if (entity is! File || !entity.path.endsWith('.txt')) {
-            return false;
-          }
-
-          final fileName = entity.path.split('/').last;
-          // 匹配新格式: log_20231128_120530_001.txt (日期_时间_序号)
-          // 也兼容旧格式: log_20231128_001.txt (日期_序号)
-          final newFormatMatch =
-              RegExp(r'log_' + today + r'_(\d{6}_\d{3}|\d{3})\.txt$')
-                  .hasMatch(fileName);
-          return newFormatMatch;
-        })
-        .map((entity) => entity as File)
-        .toList();
-
-    files.sort((a, b) => a.path.compareTo(b.path));
-    return files;
-  }
-
   /// 获取所有日志文件
   Future<List<File>> _getLogFiles() async {
     if (_logDirectory == null) return [];
