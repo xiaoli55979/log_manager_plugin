@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0
+
+* **New Feature**: 新增公共日志上报通道（`LogReportSink` + `LogReportEntry`）
+  - `LogManager.setReportSink` / `report` 统一上报入口
+  - 可靠上报队列 `LogReportQueue`：三触发批量、失败重试限流退避、失败批保留、内存上限、防重入、`flush`/`dispose` 退出兜底、`send` 超时
+  - 上报队列按 topic 分组发送，避免一批混多 topic 被 sink 误路由
+  - 现有 `d/i/w/e/init` 等公共签名零改动，纯新增零破坏
+* **New Feature**: 支持实时日志上传（`enableRemoteFullLog` + `setFullLogDesensitizer`）
+  - `_CustomMultiOutput` 增加 `full_logs` 第三分支 tap
+  - 上报前可注入脱敏函数
+* **New Feature**: 详细外部日志上报能力增强
+* **New Feature**: 新增线路日志展示页面
+* **New Feature**: 日志压缩支持后台执行，避免阻塞 UI
+* **Improvement**: 优化日志显示管理，支持外部配置注入
+* **Improvement**: 调整加密内容显示格式
+* **Improvement**: 优化日志分隔线长度，缩短 1/3 避免换行问题
+  - START / END 分隔线从 35/36 个等号缩短到 23/24 个等号
+* **Improvement**: 改进 API 接口 Body 格式化显示
+  - JSON 数据自动美化、带缩进
+  - 支持 Map、List 和 JSON 字符串
+* **Fix**: 修复日志输出被多线程打断的问题（整块一次性输出）
+* **Fix**: 修复 `ResponseBody` 类型显示为 `Instance of 'ResponseBody'` 的问题
+  - 自动解析实际内容，字节数组转 UTF-8
+
 ## 1.0.7
 
 * **Improvement**: 优化日志分隔线长度，缩短1/3避免换行问题
