@@ -23,6 +23,9 @@ class LogFileManager {
   int _maxRetentionDays = 7; // 保留7天
   String _currentDate = '';
 
+  /// 写入串行队列:保证同一时刻只有一个写操作,避免并发踩 _writeSink
+  Future<void> _writeQueue = Future<void>.value();
+
   /// 初始化日志文件管理器
   Future<void> init({
     required String logDirectory,
@@ -185,48 +188,17 @@ class LogFileManager {
   /// 注意：只有在文件管理器被正确初始化后才会写入文件
   /// 如果 enabled 为 false，文件管理器不会被初始化，此方法不会写入任何内容
   void writeLog(String log) {
-    // 如果文件管理器未初始化（enabled 为 false 时），直接返回
-    if (_logDirectory == null) {
-      // 文件管理器未初始化，不写入文件
-      return;
-    }
+    // 文件管理器未初始化（enabled 为 false）时不写文件
+    if (_logDirectory == null) return;
 
-    // 如果文件未初始化，尝试重新初始化
-    if (_currentLogFile == null) {
-      if (_logDirectory != null) {
-        // 尝试重新初始化文件
-        _initCurrentLogFile().then((_) {
-          // 初始化成功后，再次尝试写入
-          if (_currentLogFile != null) {
-            _writeLogAsync(log).catchError((error, stackTrace) {
-              if (kDebugMode) {
-                debugPrint('写入日志文件异步错误: $error');
-              }
-            });
-          }
-        }).catchError((error) {
-          if (kDebugMode) {
-            debugPrint('重新初始化日志文件失败: $error');
-          }
-        });
-      }
-      return;
-    }
-
-    // 异步执行，不阻塞主线程
-    _writeLogAsync(log).catchError((error, stackTrace) {
-      // 捕获异步错误，尝试重新初始化后重试
+    // 串行化:写操作排队,避免多个 _writeLogAsync 并发操作同一个 _writeSink 互相踩
+    // (StreamSink is closed / bound to a stream)。文件未初始化/日期切换/超限换文件
+    // 都由 _writeLogAsync 内部处理,无需在此提前 init。
+    _writeQueue = _writeQueue.then((_) => _writeLogAsync(log)).catchError((
+      Object error,
+    ) {
       if (kDebugMode) {
         debugPrint('写入日志文件异步错误: $error');
-      }
-
-      // 如果写入失败，尝试重新初始化文件
-      if (_logDirectory != null) {
-        _initCurrentLogFile().catchError((e) {
-          if (kDebugMode) {
-            debugPrint('重新初始化日志文件失败: $e');
-          }
-        });
       }
     });
   }
