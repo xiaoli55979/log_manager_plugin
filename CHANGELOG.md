@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+* **Fix**: 修复日志写入并发报错（`StreamSink is closed` / `bound to a stream`）
+  - `writeLog` 改为串行队列,所有写排队执行,避免多条日志并发操作同一个 `IOSink` 互相踩
+* **Chore**: 清理未使用的 `_getTodayLogFiles`,通过 pub 验证
+
 ## 1.1.0
 
 * **New Feature**: 新增公共日志上报通道（`LogReportSink` + `LogReportEntry`）
